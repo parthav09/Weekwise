@@ -19,6 +19,10 @@ export default {
         "accent-foreground": "hsl(var(--accent-foreground))",
         success: "hsl(var(--success))",
         "success-foreground": "hsl(var(--success-foreground))",
+        warning: "hsl(var(--warning))",
+        "warning-foreground": "hsl(var(--warning-foreground))",
+        danger: "hsl(var(--danger))",
+        "danger-foreground": "hsl(var(--danger-foreground))",
         ring: "hsl(var(--ring))",
       },
       boxShadow: {

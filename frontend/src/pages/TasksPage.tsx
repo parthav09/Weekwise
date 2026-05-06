@@ -19,10 +19,10 @@ const selectClass =
   "h-11 rounded-xl border border-border bg-card px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
 
 const priorityConfig: Record<TaskPriority, { label: string; color: string; bg: string }> = {
-  low: { label: "Low", color: "text-blue-700", bg: "bg-blue-100" },
-  medium: { label: "Medium", color: "text-orange-700", bg: "bg-orange-100" },
-  high: { label: "High", color: "text-red-700", bg: "bg-red-100" },
-  urgent: { label: "Urgent", color: "text-rose-900", bg: "bg-rose-200" },
+  low: { label: "Low", color: "text-primary", bg: "bg-primary/10" },
+  medium: { label: "Medium", color: "text-warning", bg: "bg-warning/10" },
+  high: { label: "High", color: "text-danger", bg: "bg-danger/10" },
+  urgent: { label: "Urgent", color: "text-danger", bg: "bg-danger/20" },
 }
 
 const categoryLabels: Record<TaskCategory, string> = {
@@ -219,7 +219,7 @@ export function TasksPage() {
 
       {error ? (
         <div
-          className="rounded-2xl border border-red-200/80 bg-red-50/90 px-4 py-3 text-sm text-red-900 shadow-sm backdrop-blur-sm"
+          className="rounded-xl border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger shadow-sm backdrop-blur-sm"
           role="alert"
         >
           {error}
@@ -227,7 +227,7 @@ export function TasksPage() {
       ) : null}
 
       {showAddForm && (
-        <div className="rounded-2xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
+        <div className="rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
           <form onSubmit={handleCreate} className="space-y-4">
             <Input
               placeholder="What needs to get done?"
@@ -324,7 +324,7 @@ export function TasksPage() {
           return (
             <div
               key={column.id}
-              className="flex flex-col rounded-2xl border border-border/60 bg-muted/30 p-3 sm:p-4"
+              className="flex flex-col rounded-xl border border-border/60 bg-muted/30 p-3 sm:p-4"
             >
               <div className="mb-3 flex items-center justify-between px-0.5">
                 <div>
@@ -412,13 +412,13 @@ function TaskCard({ task, onMove, onSave, onDelete }: TaskCardProps) {
         <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
           {categoryLabels[task.category]}
         </span>
-        <span className="rounded-md bg-violet-100 px-2 py-0.5 text-xs text-violet-800">
+        <span className="rounded-md bg-accent/10 px-2 py-0.5 text-xs text-accent">
           {energyLabels[task.energy_level]}
         </span>
         {task.schedule_flexibility === "fixed" ? (
-          <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs text-amber-900">Fixed</span>
+          <span className="rounded-md bg-warning/10 px-2 py-0.5 text-xs text-warning">Fixed</span>
         ) : (
-          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-700">Flexible</span>
+          <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">Flexible</span>
         )}
         <div className="relative ml-auto" ref={menuRef}>
           <button
@@ -444,7 +444,7 @@ function TaskCard({ task, onMove, onSave, onDelete }: TaskCardProps) {
               </button>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-danger/10"
                 onClick={() => {
                   setMenuOpen(false)
                   onDelete()

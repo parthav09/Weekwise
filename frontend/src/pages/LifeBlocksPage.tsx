@@ -1,19 +1,4 @@
-import {
-  Bed,
-  Briefcase,
-  Car,
-  Coffee,
-  Dumbbell,
-  GraduationCap,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Shield,
-  Sparkles,
-  Sun,
-  Trash2,
-  Users,
-} from "lucide-react"
+import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react"
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Button } from "../components/ui/button"
@@ -26,29 +11,11 @@ import {
 } from "../lib/api"
 import type { LifeBlock, LifeBlockCategory, LifeBlockType } from "../lib/api"
 import { formatDateTime } from "../lib/dates"
+import { lifeBlockCategoryConfig } from "../lib/lifeBlockCategories"
 import { cn } from "../lib/utils"
 
 const selectClass =
   "h-10 rounded-xl border border-border bg-card px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-
-interface CategoryDescriptor {
-  label: string
-  icon: typeof Shield
-  className: string
-}
-
-export const lifeBlockCategoryConfig: Record<LifeBlockCategory, CategoryDescriptor> = {
-  sleep: { label: "Sleep", icon: Bed, className: "bg-indigo-100 text-indigo-800" },
-  workout: { label: "Workout", icon: Dumbbell, className: "bg-emerald-100 text-emerald-800" },
-  commute: { label: "Commute", icon: Car, className: "bg-amber-100 text-amber-800" },
-  meal: { label: "Meal", icon: Coffee, className: "bg-orange-100 text-orange-800" },
-  class_: { label: "Class", icon: GraduationCap, className: "bg-blue-100 text-blue-800" },
-  work: { label: "Work", icon: Briefcase, className: "bg-slate-200 text-slate-800" },
-  social: { label: "Social", icon: Users, className: "bg-pink-100 text-pink-800" },
-  focus: { label: "Focus", icon: Sparkles, className: "bg-violet-100 text-violet-800" },
-  free: { label: "Free time", icon: Sun, className: "bg-yellow-100 text-yellow-800" },
-  other: { label: "Other", icon: Shield, className: "bg-muted text-muted-foreground" },
-}
 
 const blockTypeLabels: Record<LifeBlockType, string> = {
   blocked: "Blocked (no tasks)",
@@ -271,7 +238,7 @@ export function LifeBlocksPage() {
 
       {error ? (
         <div
-          className="rounded-2xl border border-red-200/80 bg-red-50/90 px-4 py-3 text-sm text-red-900 shadow-sm backdrop-blur-sm"
+          className="rounded-xl border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger shadow-sm backdrop-blur-sm"
           role="alert"
         >
           {error}
@@ -279,7 +246,7 @@ export function LifeBlocksPage() {
       ) : null}
 
       {showAdd && (
-        <div className="rounded-2xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
+        <div className="rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
           <BlockForm
             values={createForm}
             onChange={setCreateForm}
@@ -293,7 +260,7 @@ export function LifeBlocksPage() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading...</p>
       ) : blocks.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border/80 bg-card/40 p-10 text-center text-sm text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border/80 bg-card/40 p-10 text-center text-sm text-muted-foreground">
           No life blocks yet. Add one to start protecting your week.
         </div>
       ) : (
@@ -361,7 +328,7 @@ function BlockCard({ block, onSave, onDelete }: BlockCardProps) {
 
   if (editing) {
     return (
-      <div className="rounded-2xl border border-primary/30 bg-card p-4 shadow-sm">
+      <div className="rounded-xl border border-primary/30 bg-card p-4 shadow-sm">
         <BlockForm
           values={values}
           onChange={setValues}
@@ -387,7 +354,7 @@ function BlockCard({ block, onSave, onDelete }: BlockCardProps) {
 
   const cfg = lifeBlockCategoryConfig[block.category]
   return (
-    <div className="rounded-2xl border border-border/80 bg-card/90 p-4 shadow-sm backdrop-blur-sm">
+    <div className="rounded-xl border border-border/80 bg-card/90 p-4 shadow-sm backdrop-blur-sm">
       <div className="flex items-start justify-between">
         <div>
           <p className="font-medium">{block.title}</p>
@@ -417,7 +384,7 @@ function BlockCard({ block, onSave, onDelete }: BlockCardProps) {
               </button>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-danger/10"
                 onClick={() => {
                   setMenuOpen(false)
                   onDelete()

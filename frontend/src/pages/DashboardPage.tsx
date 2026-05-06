@@ -74,18 +74,18 @@ export function DashboardPage() {
     return [...taskItems, ...habitItems]
   }
 
-  const panel = "rounded-2xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm"
+  const panel = "rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm"
 
   function priorityDotClass(priority: TaskPriority) {
     switch (priority) {
       case "urgent":
-        return "bg-rose-600"
+        return "bg-danger"
       case "high":
-        return "bg-red-500"
+        return "bg-danger/80"
       case "medium":
-        return "bg-orange-400"
+        return "bg-warning"
       default:
-        return "bg-blue-400"
+        return "bg-primary"
     }
   }
 
@@ -93,7 +93,7 @@ export function DashboardPage() {
     <div className="space-y-8">
       {loadError ? (
         <div
-          className="rounded-2xl border border-red-200/80 bg-red-50/90 px-4 py-3 text-sm text-red-900 shadow-sm backdrop-blur-sm"
+          className="rounded-xl border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger shadow-sm backdrop-blur-sm"
           role="alert"
         >
           {loadError}
@@ -119,14 +119,14 @@ export function DashboardPage() {
               label="Tasks open"
               value={openTasks.length}
               trend={tasks.length > 0 ? `${doneTasks.length} done` : undefined}
-              color="orange"
+              color="primary"
             />
             <StatCard
               icon={Flame}
               label="Habits this week"
               value={`${habitDone}/${habitTarget}`}
               trend={`${habitProgress}% complete`}
-              color="emerald"
+              color="success"
             />
             <StatCard
               icon={CheckCircle2}
@@ -230,14 +230,14 @@ export function DashboardPage() {
                 const progress = Math.round((count / habit.target_count_per_week) * 100)
                 return (
                   <div key={habit.id} className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-                      <Flame className="h-4 w-4 text-emerald-600" />
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-success/10">
+                      <Flame className="h-4 w-4 text-success" />
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-medium">{habit.title}</p>
                       <div className="mt-1 h-1.5 w-full rounded-full bg-muted">
                         <div
-                          className="h-full rounded-full bg-emerald-500 transition-all"
+                          className="h-full rounded-full bg-success transition-all"
                           style={{ width: `${Math.min(100, progress)}%` }}
                         />
                       </div>
@@ -277,7 +277,7 @@ export function DashboardPage() {
                 <div
                   key={day.toISOString()}
                   className={cn(
-                    "relative w-[5.5rem] shrink-0 rounded-2xl border border-border/80 bg-card/90 p-3 shadow-sm backdrop-blur-sm sm:w-auto",
+                    "relative w-[5.5rem] shrink-0 rounded-xl border border-border/80 bg-card/90 p-3 shadow-sm backdrop-blur-sm sm:w-auto",
                     isToday
                       ? "border-primary shadow-sm ring-1 ring-primary/20"
                       : "hover:border-primary/40",
@@ -308,8 +308,8 @@ export function DashboardPage() {
                           className={cn(
                             "truncate rounded-md px-2 py-1 text-xs",
                             item.type === "habit"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-orange-100 text-orange-800"
+                              ? "bg-success/10 text-success"
+                              : "bg-primary/10 text-primary"
                           )}
                         >
                           {item.title}
@@ -342,11 +342,11 @@ export function DashboardPage() {
           {/* Legend */}
           <div className="mt-4 flex items-center justify-center gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-orange-400" />
+              <span className="h-2 w-2 rounded-full bg-primary" />
               Task
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="h-2 w-2 rounded-full bg-success" />
               Habit
             </span>
           </div>
@@ -367,17 +367,17 @@ function StatCard({
   label: string
   value: string | number
   trend?: string
-  color: "orange" | "emerald" | "blue" | "purple"
+  color: "primary" | "success" | "blue" | "purple"
 }) {
   const colorClasses = {
-    orange: "bg-orange-100 text-orange-700",
-    emerald: "bg-emerald-100 text-emerald-700",
-    blue: "bg-blue-100 text-blue-700",
-    purple: "bg-purple-100 text-purple-700",
+    primary: "bg-primary/10 text-primary",
+    success: "bg-success/10 text-success",
+    blue: "bg-accent/10 text-accent",
+    purple: "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200",
   }
 
   return (
-    <div className="rounded-2xl border border-border/80 bg-card/90 p-4 shadow-sm backdrop-blur-sm">
+    <div className="rounded-xl border border-border/80 bg-card/90 p-4 shadow-sm backdrop-blur-sm">
       <div className="flex items-start justify-between">
         <div className={cn("rounded-xl p-2", colorClasses[color])}>
           <Icon className="h-4 w-4" />

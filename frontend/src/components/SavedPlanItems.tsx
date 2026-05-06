@@ -14,11 +14,11 @@ interface SavedPlanItemsProps {
 }
 
 const statusTone: Record<SavedPlanItemStatus, string> = {
-  planned: "border-slate-200 bg-slate-50 text-slate-800",
-  done: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  skipped: "border-amber-200 bg-amber-50 text-amber-900",
-  moved: "border-blue-200 bg-blue-50 text-blue-800",
-  failed: "border-red-200 bg-red-50 text-red-800",
+  planned: "border-border bg-muted text-muted-foreground",
+  done: "border-success/25 bg-success/10 text-success",
+  skipped: "border-warning/25 bg-warning/10 text-warning",
+  moved: "border-primary/25 bg-primary/10 text-primary",
+  failed: "border-danger/25 bg-danger/10 text-danger",
 }
 
 function formatTime(value: string) {
@@ -100,7 +100,7 @@ export function SavedPlanItems({
                   {item.item_type} · {formatTime(item.start_at)} - {formatTime(item.end_at)}
                 </p>
                 {item.status === "moved" && item.moved_to_start && item.moved_to_end ? (
-                  <p className="mt-1 text-xs text-blue-700">
+                  <p className="mt-1 text-xs text-primary">
                     Moved to {formatTime(item.moved_to_start)} - {formatTime(item.moved_to_end)}
                   </p>
                 ) : null}

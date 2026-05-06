@@ -164,7 +164,7 @@ export function HabitsPage() {
 
       {error ? (
         <div
-          className="rounded-2xl border border-red-200/80 bg-red-50/90 px-4 py-3 text-sm text-red-900 shadow-sm backdrop-blur-sm"
+          className="rounded-xl border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger shadow-sm backdrop-blur-sm"
           role="alert"
         >
           {error}
@@ -172,14 +172,14 @@ export function HabitsPage() {
       ) : null}
 
       {/* Progress bar */}
-      <div className="rounded-2xl border border-border/80 bg-card/90 p-4 shadow-sm backdrop-blur-sm">
+      <div className="rounded-xl border border-border/80 bg-card/90 p-4 shadow-sm backdrop-blur-sm">
         <div className="mb-2 flex items-center justify-between text-sm">
           <span className="font-medium">Weekly progress</span>
           <span className="text-muted-foreground">{overallProgress}%</span>
         </div>
         <div className="h-3 w-full rounded-full bg-muted">
           <div
-            className="h-full rounded-full bg-emerald-500 transition-all"
+            className="h-full rounded-full bg-success transition-all"
             style={{ width: `${Math.min(100, overallProgress)}%` }}
           />
         </div>
@@ -187,7 +187,7 @@ export function HabitsPage() {
 
       {/* Add habit form */}
       {showAddForm && (
-        <div className="rounded-2xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
+        <div className="rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
           <h3 className="mb-4 font-medium">Start a new habit</h3>
           <form onSubmit={handleCreate} className="grid gap-4 sm:grid-cols-[1fr_auto_auto_auto]">
             <Input
@@ -245,7 +245,7 @@ export function HabitsPage() {
       </div>
 
       {habits.length === 0 && !isLoading && (
-        <div className="rounded-2xl border border-dashed border-border/80 bg-card/40 p-12 text-center">
+        <div className="rounded-xl border border-dashed border-border/80 bg-card/40 p-12 text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
             <Target className="h-6 w-6 text-muted-foreground" />
           </div>
@@ -318,8 +318,8 @@ function HabitCard({
   return (
     <div
       className={cn(
-        "relative rounded-2xl border border-border/80 p-5 shadow-sm backdrop-blur-sm transition-all",
-        isComplete ? "border-emerald-200/90 bg-emerald-50/60" : "bg-card/90 hover:border-primary/20 hover:shadow-md",
+        "relative rounded-xl border border-border/80 p-5 shadow-sm backdrop-blur-sm transition-all",
+        isComplete ? "border-success/30 bg-success/10" : "bg-card/90 hover:border-primary/20 hover:shadow-md",
       )}
     >
       <div className="flex items-start justify-between">
@@ -327,7 +327,7 @@ function HabitCard({
           <div
             className={cn(
               "flex h-10 w-10 items-center justify-center rounded-xl",
-              isComplete ? "bg-emerald-100 text-emerald-700" : "bg-orange-100 text-orange-700",
+              isComplete ? "bg-success/10 text-success" : "bg-primary/10 text-primary",
             )}
           >
             <Flame className="h-5 w-5" />
@@ -364,7 +364,7 @@ function HabitCard({
               </button>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-danger/10"
                 onClick={() => {
                   setMenuOpen(false)
                   onDelete()
@@ -381,7 +381,7 @@ function HabitCard({
       <div className="mt-4">
         <div className="mb-2 flex items-center justify-between text-xs">
           <span className="text-muted-foreground">This week</span>
-          <span className={cn("font-medium", isComplete ? "text-emerald-700" : "text-foreground")}>
+          <span className={cn("font-medium", isComplete ? "text-success" : "text-foreground")}>
             {count}/{habit.target_count_per_week}
           </span>
         </div>
@@ -399,7 +399,7 @@ function HabitCard({
                   className={cn(
                     "flex h-8 w-full items-center justify-center rounded-lg border-2 transition-colors",
                     hasCompletion
-                      ? "border-emerald-500 bg-emerald-500"
+                      ? "border-success bg-success"
                       : "border-muted bg-transparent",
                     isToday && !hasCompletion && "border-primary ring-1 ring-primary/15",
                   )}
@@ -422,7 +422,7 @@ function HabitCard({
           <div
             className={cn(
               "h-full rounded-full transition-all",
-              isComplete ? "bg-emerald-500" : "bg-orange-400",
+              isComplete ? "bg-success" : "bg-primary",
             )}
             style={{ width: `${Math.min(100, progress)}%` }}
           />
@@ -432,7 +432,7 @@ function HabitCard({
       <Button
         className={cn(
           "mt-4 w-full",
-          isComplete ? "bg-emerald-600 hover:bg-emerald-700" : "bg-orange-500 hover:bg-orange-600",
+          isComplete ? "bg-success text-success-foreground hover:bg-success/90" : "bg-primary hover:bg-primary/90",
         )}
         onClick={onComplete}
         disabled={isCompleting || loggedToday}
@@ -487,7 +487,7 @@ function HabitEditForm({ habit, onCancel, onSubmit }: HabitEditFormProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-3 rounded-2xl border border-primary/30 bg-card p-5 shadow-sm"
+      className="space-y-3 rounded-xl border border-primary/30 bg-card p-5 shadow-sm"
     >
       <Input
         value={title}

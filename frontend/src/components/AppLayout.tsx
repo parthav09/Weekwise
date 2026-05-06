@@ -25,6 +25,7 @@ const navItems = [
 export function AppLayout() {
   const location = useLocation()
   const isHome = location.pathname === "/"
+  const isSettings = location.pathname === "/settings"
 
   return (
     <div className="min-h-screen">
@@ -51,7 +52,7 @@ export function AppLayout() {
                     "flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-sm transition-colors sm:px-3",
                     "outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring",
                     isActive
-                      ? "bg-muted font-medium text-foreground shadow-sm"
+                      ? "bg-primary/10 font-medium text-primary shadow-sm"
                       : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                   )
                 }
@@ -68,7 +69,7 @@ export function AppLayout() {
               aria-label="Settings"
               className={cn(
                 buttonVariants({ variant: "ghost", size: "icon" }),
-                "text-muted-foreground",
+                isSettings ? "bg-primary/10 text-primary" : "text-muted-foreground",
               )}
             >
               <Settings className="h-4 w-4" />
