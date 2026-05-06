@@ -1,0 +1,2 @@
+"""WeekWise backend package."""
+

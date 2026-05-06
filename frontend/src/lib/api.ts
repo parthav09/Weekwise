@@ -1,0 +1,397 @@
+import { toLocalDateKey } from "./dates"
+
+// WeekWise REST API: types match the backend JSON (snake_case).
+
+export type TaskPriority = "low" | "medium" | "high" | "urgent"
+export type TaskStatus = "todo" | "in_progress" | "done"
+export type TaskEnergyLevel = "low" | "medium" | "high"
+export type TaskCategory = "school" | "work" | "fitness" | "social" | "errands" | "personal"
+export type TaskScheduleFlexibility = "flexible" | "fixed"
+
+export interface Task {
+  id: number
+  user_id: number
+  title: string
+  description: string | null
+  priority: TaskPriority
+  status: TaskStatus
+  due_date: string | null
+  estimated_minutes: number | null
+  energy_level: TaskEnergyLevel
+  category: TaskCategory
+  schedule_flexibility: TaskScheduleFlexibility
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Habit {
+  id: number
+  user_id: number
+  title: string
+  target_count_per_week: number
+  estimated_minutes: number | null
+  preferred_time_of_day: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface HabitCompletion {
+  id: number
+  habit_id: number
+  user_id: number
+  note: string | null
+  completed_on: string
+  completed_at: string
+  created_at: string
+  habit_title: string
+}
+
+export interface TaskCreateInput {
+  title: string
+  description?: string | null
+  priority: TaskPriority
+  due_date?: string | null
+  estimated_minutes?: number | null
+  energy_level?: TaskEnergyLevel
+  category?: TaskCategory
+  schedule_flexibility?: TaskScheduleFlexibility
+}
+
+export interface HabitCreateInput {
+  title: string
+  target_count_per_week: number
+  estimated_minutes?: number | null
+  preferred_time_of_day?: string | null
+}
+
+export type HabitUpdateInput = Partial<HabitCreateInput>
+
+export type LifeBlockType = "available" | "blocked" | "recovery"
+export type LifeBlockCategory =
+  | "sleep"
+  | "workout"
+  | "commute"
+  | "meal"
+  | "class_"
+  | "work"
+  | "social"
+  | "focus"
+  | "free"
+  | "other"
+
+export interface LifeBlock {
+  id: number
+  user_id: number
+  title: string
+  block_type: LifeBlockType
+  category: LifeBlockCategory
+  start_time: string
+  end_time: string
+  recurrence_rule: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface LifeBlockCreateInput {
+  title: string
+  block_type: LifeBlockType
+  category: LifeBlockCategory
+  start_time: string
+  end_time: string
+  recurrence_rule?: string | null
+}
+
+export type LifeBlockUpdateInput = Partial<LifeBlockCreateInput>
+
+export type PlanGenerator = "rules" | "ai"
+export type PlanBlockType = "task" | "habit" | "life"
+export type SavedPlanScope = "day" | "week"
+export type SavedPlanItemStatus = "planned" | "done" | "skipped" | "moved" | "failed"
+
+export interface PlanBlock {
+  start: string
+  end: string
+  type: PlanBlockType
+  title: string
+  source_id: number | null
+  metadata: Record<string, unknown>
+}
+
+export interface PlanDay {
+  date: string
+  blocks: PlanBlock[]
+}
+
+export interface PlanRead {
+  generated_at: string
+  generator: PlanGenerator
+  start_at: string
+  end_at: string
+  days: PlanDay[]
+  notes: string[]
+}
+
+export interface SavedPlanItem {
+  id: number
+  generated_plan_id: number
+  generated_plan_day_id: number
+  title: string
+  item_type: PlanBlockType | string
+  source_id: number | null
+  start_at: string
+  end_at: string
+  status: SavedPlanItemStatus
+  feedback_reason: string | null
+  moved_to_start: string | null
+  moved_to_end: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface SavedPlanDay {
+  id: number
+  generated_plan_id: number
+  date: string
+  items: SavedPlanItem[]
+  created_at: string
+}
+
+export interface SavedPlan {
+  id: number
+  user_id: number
+  scope: SavedPlanScope
+  generator: PlanGenerator
+  start_at: string
+  end_at: string
+  notes: string[]
+  plan: PlanRead
+  days: SavedPlanDay[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ListSavedPlansOptions {
+  scope?: SavedPlanScope
+  startFrom?: Date
+  endTo?: Date
+}
+
+export interface SavedPlanItemUpdateInput {
+  status?: SavedPlanItemStatus
+  feedback_reason?: string | null
+  moved_to_start?: string | null
+  moved_to_end?: string | null
+}
+
+export interface PlanRequestInput {
+  user_id?: number
+  start_at: Date
+  end_at: Date
+  day_start?: string
+  day_end?: string
+}
+
+export interface ListTasksOptions {
+  dueFrom?: Date
+  dueTo?: Date
+}
+
+export interface ListLifeBlocksOptions {
+  startFrom?: Date
+  endTo?: Date
+}
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, "")
+
+type ApiErrorBody = { detail?: string }
+
+async function request(path: string, init?: RequestInit): Promise<Response> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { "Content-Type": "application/json", ...init?.headers },
+    ...init,
+  })
+
+  if (!response.ok) {
+    const err = (await response.json().catch(() => ({}))) as ApiErrorBody
+    throw new Error(err.detail ?? `HTTP ${response.status}`)
+  }
+
+  return response
+}
+
+async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await request(path, init)
+  return (await response.json()) as T
+}
+
+async function fetchVoid(path: string, init?: RequestInit): Promise<void> {
+  await request(path, init)
+}
+
+export function listTasks({ dueFrom, dueTo }: ListTasksOptions = {}) {
+  const params = new URLSearchParams()
+  if (dueFrom) params.set("due_from", toLocalDateKey(dueFrom))
+  if (dueTo) params.set("due_to", toLocalDateKey(dueTo))
+  const query = params.toString()
+  return fetchJson<Task[]>(query ? `/tasks?${query}` : "/tasks")
+}
+
+export function createTask(input: TaskCreateInput) {
+  return fetchJson<Task>("/tasks", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateTask(taskId: number, input: Partial<TaskCreateInput> & { status?: TaskStatus }) {
+  return fetchJson<Task>(`/tasks/${taskId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteTask(taskId: number) {
+  return fetchVoid(`/tasks/${taskId}`, { method: "DELETE" })
+}
+
+export function listHabits() {
+  return fetchJson<Habit[]>("/habits")
+}
+
+export function createHabit(input: HabitCreateInput) {
+  return fetchJson<Habit>("/habits", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateHabit(habitId: number, input: HabitUpdateInput) {
+  return fetchJson<Habit>(`/habits/${habitId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteHabit(habitId: number) {
+  return fetchVoid(`/habits/${habitId}`, { method: "DELETE" })
+}
+
+export function completeHabit(habitId: number, completedOn?: Date) {
+  return fetchJson<HabitCompletion>(`/habits/${habitId}/completions`, {
+    method: "POST",
+    body: JSON.stringify({ completed_on: toLocalDateKey(completedOn) }),
+  })
+}
+
+export function listHabitCompletions(startAt?: Date, endAt?: Date) {
+  const params = new URLSearchParams()
+  if (startAt) params.set("start_at", startAt.toISOString())
+  if (endAt) params.set("end_at", endAt.toISOString())
+
+  const query = params.toString()
+  return fetchJson<HabitCompletion[]>(
+    query ? `/habits/completions?${query}` : "/habits/completions",
+  )
+}
+
+export function listLifeBlocks({ startFrom, endTo }: ListLifeBlocksOptions = {}) {
+  const params = new URLSearchParams()
+  if (startFrom) params.set("start_from", startFrom.toISOString())
+  if (endTo) params.set("end_to", endTo.toISOString())
+  const query = params.toString()
+  return fetchJson<LifeBlock[]>(query ? `/availability-blocks?${query}` : "/availability-blocks")
+}
+
+export function createLifeBlock(input: LifeBlockCreateInput) {
+  return fetchJson<LifeBlock>("/availability-blocks", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateLifeBlock(id: number, input: LifeBlockUpdateInput) {
+  return fetchJson<LifeBlock>(`/availability-blocks/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteLifeBlock(id: number) {
+  return fetchVoid(`/availability-blocks/${id}`, { method: "DELETE" })
+}
+
+function toLocalIsoWithOffset(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0")
+  const offsetMinutes = -date.getTimezoneOffset()
+  const offsetSign = offsetMinutes >= 0 ? "+" : "-"
+  const absoluteOffset = Math.abs(offsetMinutes)
+  const offsetHours = Math.floor(absoluteOffset / 60)
+  const offsetMins = absoluteOffset % 60
+
+  return [
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`,
+    `${offsetSign}${pad(offsetHours)}:${pad(offsetMins)}`,
+  ].join("")
+}
+
+function planRequestBody(input: PlanRequestInput) {
+  return JSON.stringify({
+    user_id: input.user_id ?? 1,
+    start_at: toLocalIsoWithOffset(input.start_at),
+    end_at: toLocalIsoWithOffset(input.end_at),
+    day_start: input.day_start ?? "08:00",
+    day_end: input.day_end ?? "22:00",
+  })
+}
+
+export function generateWeekPlan(input: PlanRequestInput) {
+  return fetchJson<PlanRead>("/plans/week", {
+    method: "POST",
+    body: planRequestBody(input),
+  })
+}
+
+export function generateDayPlan(input: PlanRequestInput) {
+  return fetchJson<PlanRead>("/plans/day", {
+    method: "POST",
+    body: planRequestBody(input),
+  })
+}
+
+export function savePlan(plan: PlanRead) {
+  return fetchJson<SavedPlan>("/plans/save", {
+    method: "POST",
+    body: JSON.stringify({ user_id: 1, plan }),
+  })
+}
+
+export function saveWeekPlan(plan: PlanRead) {
+  return savePlan(plan)
+}
+
+export function saveDayPlan(plan: PlanRead) {
+  return savePlan(plan)
+}
+
+export function listSavedPlans({ scope, startFrom, endTo }: ListSavedPlansOptions = {}) {
+  const params = new URLSearchParams()
+  if (scope) params.set("scope", scope)
+  if (startFrom) params.set("start_from", startFrom.toISOString())
+  if (endTo) params.set("end_to", endTo.toISOString())
+  const query = params.toString()
+  return fetchJson<SavedPlan[]>(query ? `/plans/saved?${query}` : "/plans/saved")
+}
+
+export function getSavedPlan(planId: number) {
+  return fetchJson<SavedPlan>(`/plans/saved/${planId}`)
+}
+
+export function updateSavedPlanItem(itemId: number, input: SavedPlanItemUpdateInput) {
+  return fetchJson<SavedPlanItem>(`/plans/items/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
