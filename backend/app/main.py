@@ -5,8 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import availability_blocks, habits, plans, tasks
+from app.api.routes import availability_blocks, habits, notifications, plans, tasks
 from app.core.config import settings
+from app.integrations.google_calendar import routes as google_calendar_routes
+from app.integrations.gmail import routes as gmail_routes
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIST_DIR = PROJECT_ROOT / "frontend" / "dist"
@@ -38,6 +40,9 @@ app.include_router(tasks.router, prefix="/api")
 app.include_router(habits.router, prefix="/api")
 app.include_router(availability_blocks.router, prefix="/api")
 app.include_router(plans.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
+app.include_router(google_calendar_routes.router, prefix="/api")
+app.include_router(gmail_routes.router, prefix="/api")
 
 if FRONTEND_ASSETS_DIR.exists():
     app.mount(

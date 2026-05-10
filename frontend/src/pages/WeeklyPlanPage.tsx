@@ -1,5 +1,6 @@
 import {
   CheckCircle2,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Flame,
@@ -17,7 +18,10 @@ import { Input } from "../components/ui/input"
 import {
   createTask,
   deleteTask,
+  exportSavedPlanToGoogleCalendar,
   generateWeekPlan,
+  listGoogleCalendarEvents,
+  listScheduledNotifications,
   listHabitCompletions,
   listHabits,
   listLifeBlocks,
@@ -28,6 +32,7 @@ import {
   updateSavedPlanItem,
 } from "../lib/api"
 import type {
+  CalendarEvent,
   Habit,
   HabitCompletion,
   LifeBlock,
@@ -36,6 +41,7 @@ import type {
   SavedPlan,
   SavedPlanItem,
   SavedPlanItemUpdateInput,
+  ScheduledNotification,
   Task,
   TaskPriority,
 } from "../lib/api"
@@ -92,21 +98,29 @@ export function WeeklyPlanPage() {
   const [savingPlan, setSavingPlan] = useState(false)
   const [savedPlans, setSavedPlans] = useState<SavedPlan[]>([])
   const [updatingSavedItemId, setUpdatingSavedItemId] = useState<number | null>(null)
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [scheduledNotifications, setScheduledNotifications] = useState<ScheduledNotification[]>([])
+  const [exportingPlanId, setExportingPlanId] = useState<number | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const loadWeek = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
-      const [t, h, c, lb] = await Promise.all([
+      const [t, h, c, lb, events, notifications] = await Promise.all([
         listTasks({ dueFrom: weekStart, dueTo: weekEnd }),
         listHabits(),
         listHabitCompletions(weekStart, weekEnd),
         listLifeBlocks({ startFrom: weekStart, endTo: weekEnd }),
+        listGoogleCalendarEvents(weekStart, weekEnd),
+        listScheduledNotifications({ status: "pending" }),
       ])
       setTasks(t)
       setHabits(h)
       setCompletions(c)
       setLifeBlocks(lb)
+      setCalendarEvents(events)
+      setScheduledNotifications(notifications)
       setSavedPlans(await listSavedPlans({ startFrom: weekStart, endTo: weekEnd }))
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't load this week")
@@ -147,11 +161,29 @@ export function WeeklyPlanPage() {
     try {
       const saved = await savePlan(plan)
       setSavedPlans((prev) => [saved, ...prev])
+      setScheduledNotifications(await listScheduledNotifications({ status: "pending" }))
       setPlan(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save plan")
     } finally {
       setSavingPlan(false)
+    }
+  }
+
+  async function handleExportSavedPlan(savedPlan: SavedPlan) {
+    setExportingPlanId(savedPlan.id)
+    setError(null)
+    setSuccessMessage(null)
+    try {
+      const result = await exportSavedPlanToGoogleCalendar(savedPlan.id)
+      setSuccessMessage(
+        `Exported ${result.exported_count} item${result.exported_count === 1 ? "" : "s"} to Google Calendar${result.skipped_count ? `; ${result.skipped_count} already exported` : ""}.`,
+      )
+      setSavedPlans(await listSavedPlans({ startFrom: weekStart, endTo: weekEnd }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't export saved plan")
+    } finally {
+      setExportingPlanId(null)
     }
   }
 
@@ -176,6 +208,7 @@ export function WeeklyPlanPage() {
     try {
       const updated = await updateSavedPlanItem(item.id, input)
       replaceSavedItem(updated)
+      setScheduledNotifications(await listScheduledNotifications({ status: "pending" }))
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't update saved plan item")
     } finally {
@@ -255,6 +288,28 @@ export function WeeklyPlanPage() {
     return groupOccurrencesByDay(occurrences)
   }, [lifeBlocks, weekStart, weekEnd])
 
+  const calendarEventsByDay = useMemo(() => {
+    const map = new Map<string, CalendarEvent[]>()
+    for (const day of weekDays) map.set(toLocalDateKey(day), [])
+    for (const event of calendarEvents) {
+      const start = new Date(event.start_at)
+      const end = new Date(event.end_at)
+      for (const day of weekDays) {
+        const dayStart = new Date(day)
+        dayStart.setHours(0, 0, 0, 0)
+        const dayEnd = new Date(day)
+        dayEnd.setHours(23, 59, 59, 999)
+        if (end > dayStart && start <= dayEnd) {
+          map.get(toLocalDateKey(day))?.push(event)
+        }
+      }
+    }
+    for (const events of map.values()) {
+      events.sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+    }
+    return map
+  }, [calendarEvents, weekDays])
+
   const planBlocksByDay = useMemo(() => {
     const map = new Map<string, PlanBlock[]>()
     if (!plan) return map
@@ -280,6 +335,14 @@ export function WeeklyPlanPage() {
     }
     return map
   }, [savedPlans, weekDays])
+
+  const pendingNotificationItemIds = useMemo(() => {
+    return new Set(
+      scheduledNotifications
+        .map((notification) => notification.generated_plan_item_id)
+        .filter((id): id is number => id !== null),
+    )
+  }, [scheduledNotifications])
 
   const totalTasks = tasks.length
   const doneTasks = tasks.filter((t) => t.status === "done").length
@@ -365,6 +428,31 @@ export function WeeklyPlanPage() {
         </div>
       ) : null}
 
+      {successMessage ? (
+        <div className="rounded-xl border border-success/25 bg-success/10 px-4 py-3 text-sm text-success shadow-sm">
+          {successMessage}
+        </div>
+      ) : null}
+
+      {savedPlans.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-card/90 px-4 py-3 text-sm shadow-sm">
+          <span className="font-medium">Saved plans</span>
+          {savedPlans.map((savedPlan) => (
+            <Button
+              key={savedPlan.id}
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={exportingPlanId === savedPlan.id}
+              onClick={() => handleExportSavedPlan(savedPlan)}
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              {exportingPlanId === savedPlan.id ? "Exporting..." : `Export #${savedPlan.id}`}
+            </Button>
+          ))}
+        </div>
+      )}
+
       <div className="overflow-x-auto">
         <div className="grid min-w-[900px] grid-cols-7 gap-3">
           {weekDays.map((day) => {
@@ -372,6 +460,7 @@ export function WeeklyPlanPage() {
             const dayTasks = tasksByDay.get(dayKey) ?? []
             const dayCompletions = completionsByDay.get(dayKey) ?? []
             const dayLifeBlocks = lifeBlocksByDay.get(dayKey) ?? []
+            const dayCalendarEvents = calendarEventsByDay.get(dayKey) ?? []
             const dayPlanBlocks = planBlocksByDay.get(dayKey) ?? []
             const daySavedItems = savedItemsByDay.get(dayKey) ?? []
             const isToday = isSameLocalDay(day, today)
@@ -384,8 +473,10 @@ export function WeeklyPlanPage() {
                 tasks={dayTasks}
                 completions={dayCompletions}
                 lifeBlocks={dayLifeBlocks}
+                calendarEvents={dayCalendarEvents}
                 planBlocks={dayPlanBlocks}
                 savedItems={daySavedItems}
+                pendingNotificationItemIds={pendingNotificationItemIds}
                 updatingSavedItemId={updatingSavedItemId}
                 weekDays={weekDays}
                 onQuickAdd={(title, priority) => handleQuickAdd(day, title, priority)}
@@ -414,8 +505,10 @@ interface DayColumnProps {
   tasks: Task[]
   completions: HabitCompletion[]
   lifeBlocks: LifeBlockOccurrence[]
+  calendarEvents: CalendarEvent[]
   planBlocks: PlanBlock[]
   savedItems: SavedPlanItem[]
+  pendingNotificationItemIds: Set<number>
   updatingSavedItemId: number | null
   weekDays: Date[]
   onQuickAdd: (title: string, priority: TaskPriority) => void
@@ -434,8 +527,10 @@ function DayColumn({
   tasks,
   completions,
   lifeBlocks,
+  calendarEvents,
   planBlocks,
   savedItems,
+  pendingNotificationItemIds,
   updatingSavedItemId,
   weekDays,
   onQuickAdd,
@@ -509,6 +604,14 @@ function DayColumn({
         </div>
       )}
 
+      {calendarEvents.length > 0 && (
+        <div className="mb-3 space-y-1">
+          {calendarEvents.map((event) => (
+            <CalendarEventChip key={event.id} event={event} />
+          ))}
+        </div>
+      )}
+
       {adding && (
         <form onSubmit={handleSubmit} className="mb-3 space-y-2 rounded-xl border border-border bg-card p-2 shadow-sm">
           <Input
@@ -578,6 +681,7 @@ function DayColumn({
           <SavedPlanItems
             compact
             items={savedItems}
+            pendingNotificationItemIds={pendingNotificationItemIds}
             updatingItemId={updatingSavedItemId}
             onUpdate={onUpdateSavedItem}
           />
@@ -634,6 +738,25 @@ function PlanBlockChip({ block }: { block: PlanBlock }) {
       <div className="font-medium leading-tight">{block.title}</div>
       <div className="text-[10px] opacity-70">
         {fmt(start)} – {fmt(end)}
+      </div>
+    </div>
+  )
+}
+
+function CalendarEventChip({ event }: { event: CalendarEvent }) {
+  const start = new Date(event.start_at)
+  const end = new Date(event.end_at)
+  return (
+    <div
+      className="rounded-lg border border-sky-300/40 bg-sky-50 px-2 py-1 text-[11px] text-sky-800 shadow-sm dark:border-sky-400/20 dark:bg-sky-500/10 dark:text-sky-200"
+      title="Google Calendar event"
+    >
+      <div className="flex items-center gap-1 font-medium leading-tight">
+        <CalendarDays className="h-3 w-3 shrink-0" />
+        <span className="truncate">{event.title}</span>
+      </div>
+      <div className="text-[10px] opacity-75">
+        {event.is_all_day ? "All day" : formatTimeRange(start, end)}
       </div>
     </div>
   )

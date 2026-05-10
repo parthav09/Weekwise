@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom"
 
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
-import { listHabitCompletions, listHabits, listTasks, createTask } from "../lib/api"
+import { listExtractedCandidates, listHabitCompletions, listHabits, listTasks, createTask } from "../lib/api"
 import type { Habit, HabitCompletion, Task, TaskPriority } from "../lib/api"
 import { formatMonthDay, formatShortDay, getWeekDays, getWeekEnd, getWeekStart, isSameLocalDay } from "../lib/dates"
 import { cn } from "../lib/utils"
@@ -18,6 +18,7 @@ export function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [habits, setHabits] = useState<Habit[]>([])
   const [completions, setCompletions] = useState<HabitCompletion[]>([])
+  const [pendingEmailTaskCount, setPendingEmailTaskCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [quickTask, setQuickTask] = useState("")
@@ -28,14 +29,16 @@ export function DashboardPage() {
       setIsLoading(true)
       setLoadError(null)
       try {
-        const [t, h, c] = await Promise.all([
+        const [t, h, c, emailCandidates] = await Promise.all([
           listTasks(),
           listHabits(),
           listHabitCompletions(weekStart, weekEnd),
+          listExtractedCandidates({ status: "pending" }),
         ])
         setTasks(t)
         setHabits(h)
         setCompletions(c)
+        setPendingEmailTaskCount(emailCandidates.length)
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : "Something went wrong")
       } finally {
@@ -98,6 +101,18 @@ export function DashboardPage() {
         >
           {loadError}
         </div>
+      ) : null}
+
+      {pendingEmailTaskCount > 0 ? (
+        <Link
+          to="/inbox"
+          className="flex items-center justify-between rounded-xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-primary shadow-sm"
+        >
+          <span>
+            {pendingEmailTaskCount} email task{pendingEmailTaskCount === 1 ? "" : "s"} waiting
+          </span>
+          <ArrowRight className="h-4 w-4" />
+        </Link>
       ) : null}
 
       {/* Stats row */}

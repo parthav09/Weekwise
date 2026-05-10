@@ -30,3 +30,27 @@ class User(Base):
     generated_plans = relationship(
         "GeneratedPlan", back_populates="user", cascade="all, delete-orphan"
     )
+    calendar_accounts = relationship(
+        "CalendarAccount", back_populates="user", cascade="all, delete-orphan"
+    )
+    calendar_event_cache = relationship(
+        "CalendarEventCache", back_populates="user", cascade="all, delete-orphan"
+    )
+    notification_preferences = relationship(
+        "NotificationPreference", back_populates="user", cascade="all, delete-orphan"
+    )
+    web_push_subscriptions = relationship(
+        "WebPushSubscription", back_populates="user", cascade="all, delete-orphan"
+    )
+    scheduled_notifications = relationship(
+        "ScheduledNotification", back_populates="user", cascade="all, delete-orphan"
+    )
+    gmail_accounts = relationship(
+        "GmailAccount", back_populates="user", cascade="all, delete-orphan"
+    )
+    email_messages = relationship(
+        "EmailMessage", back_populates="user", cascade="all, delete-orphan"
+    )
+    extracted_task_candidates = relationship(
+        "ExtractedTaskCandidate", back_populates="user", cascade="all, delete-orphan"
+    )

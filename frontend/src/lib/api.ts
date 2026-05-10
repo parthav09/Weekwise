@@ -107,7 +107,13 @@ export type LifeBlockUpdateInput = Partial<LifeBlockCreateInput>
 export type PlanGenerator = "rules" | "ai"
 export type PlanBlockType = "task" | "habit" | "life"
 export type SavedPlanScope = "day" | "week"
-export type SavedPlanItemStatus = "planned" | "done" | "skipped" | "moved" | "failed"
+export type SavedPlanItemStatus =
+  | "planned"
+  | "done"
+  | "skipped"
+  | "moved"
+  | "failed"
+  | "cancelled"
 
 export interface PlanBlock {
   start: string
@@ -183,6 +189,158 @@ export interface SavedPlanItemUpdateInput {
   feedback_reason?: string | null
   moved_to_start?: string | null
   moved_to_end?: string | null
+}
+
+export interface CalendarStatus {
+  connected: boolean
+  provider_account_email: string | null
+  token_expires_at: string | null
+}
+
+export interface CalendarEvent {
+  id: number
+  user_id: number
+  provider_event_id: string
+  calendar_id: string
+  title: string
+  start_at: string
+  end_at: string
+  is_all_day: boolean
+  raw_payload: Record<string, unknown>
+  synced_at: string
+}
+
+export interface CalendarSyncResult {
+  synced_count: number
+  calendar_id: string
+  synced_at: string
+}
+
+export interface CalendarExportResult {
+  exported_count: number
+  skipped_count: number
+  event_ids: string[]
+}
+
+export interface GmailStatus {
+  connected: boolean
+  provider_account_email: string | null
+  token_expires_at: string | null
+  last_synced_at: string | null
+}
+
+export interface GmailSyncResult {
+  fetched_count: number
+  new_email_count: number
+  candidate_count: number
+}
+
+export type ExtractedTaskCandidateStatus = "pending" | "accepted" | "rejected"
+
+export interface EmailMessageSummary {
+  id: number
+  sender: string | null
+  subject: string | null
+  snippet: string | null
+  received_at: string
+  is_extracted: boolean
+}
+
+export interface ExtractedTaskCandidate {
+  id: number
+  user_id: number
+  email_message_id: number
+  status: ExtractedTaskCandidateStatus
+  source: string
+  suggested_title: string
+  suggested_description: string | null
+  suggested_priority: TaskPriority
+  suggested_due_date: string | null
+  suggested_estimated_minutes: number | null
+  suggested_energy_level: TaskEnergyLevel
+  suggested_category: TaskCategory
+  suggested_schedule_flexibility: TaskScheduleFlexibility
+  confidence: number | null
+  rationale: string | null
+  created_task_id: number | null
+  created_at: string
+  updated_at: string
+  email_message: EmailMessageSummary
+}
+
+export interface ExtractedTaskCandidateOverrides {
+  title?: string
+  description?: string | null
+  priority?: TaskPriority
+  due_date?: string | null
+  estimated_minutes?: number | null
+  energy_level?: TaskEnergyLevel
+  category?: TaskCategory
+  schedule_flexibility?: TaskScheduleFlexibility
+}
+
+export interface ExtractedTaskCandidateAcceptInput {
+  overrides?: ExtractedTaskCandidateOverrides
+}
+
+export type NotificationChannel = "web_push" | "email" | "inapp"
+export type NotificationStatus = "pending" | "sent" | "failed" | "skipped" | "cancelled"
+
+export interface NotificationPreference {
+  id: number
+  user_id: number
+  channel: NotificationChannel
+  enabled: boolean
+  default_lead_minutes: number
+  created_at: string
+  updated_at: string
+}
+
+export interface NotificationPreferenceUpdateInput {
+  enabled?: boolean
+  default_lead_minutes?: number
+}
+
+export interface WebPushSubscriptionRead {
+  id: number
+  user_id: number
+  endpoint: string
+  created_at: string
+  last_used_at: string | null
+}
+
+export interface ScheduledNotification {
+  id: number
+  user_id: number
+  generated_plan_item_id: number | null
+  channel: NotificationChannel
+  status: NotificationStatus
+  send_at: string
+  sent_at: string | null
+  title: string
+  body: string
+  payload: Record<string, unknown>
+  failure_reason: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface NotificationDispatchResult {
+  pending_count: number
+  sent_count: number
+  failed_count: number
+  skipped_count: number
+  failures: { notification_id: number; channel: NotificationChannel; reason: string }[]
+}
+
+export interface ListScheduledNotificationsOptions {
+  startFrom?: Date
+  endTo?: Date
+  status?: NotificationStatus
+}
+
+export interface ListExtractedCandidatesOptions {
+  status?: ExtractedTaskCandidateStatus
 }
 
 export interface PlanRequestInput {
@@ -394,4 +552,154 @@ export function updateSavedPlanItem(itemId: number, input: SavedPlanItemUpdateIn
     method: "PATCH",
     body: JSON.stringify(input),
   })
+}
+
+function apiPath(path: string) {
+  return `${API_BASE_URL}${path}`
+}
+
+export function googleCalendarConnectUrl() {
+  return apiPath("/integrations/google-calendar/connect")
+}
+
+export function getGoogleCalendarStatus() {
+  return fetchJson<CalendarStatus>("/integrations/google-calendar/status")
+}
+
+export function syncGoogleCalendar(startAt?: Date, endAt?: Date) {
+  return fetchJson<CalendarSyncResult>("/integrations/google-calendar/sync", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: 1,
+      start_at: startAt?.toISOString(),
+      end_at: endAt?.toISOString(),
+    }),
+  })
+}
+
+export function listGoogleCalendarEvents(startFrom?: Date, endTo?: Date) {
+  const params = new URLSearchParams()
+  if (startFrom) params.set("start_from", startFrom.toISOString())
+  if (endTo) params.set("end_to", endTo.toISOString())
+  const query = params.toString()
+  return fetchJson<CalendarEvent[]>(
+    query ? `/integrations/google-calendar/events?${query}` : "/integrations/google-calendar/events",
+  )
+}
+
+export function exportSavedPlanToGoogleCalendar(savedPlanId: number) {
+  return fetchJson<CalendarExportResult>(
+    `/integrations/google-calendar/export-plan/${savedPlanId}`,
+    { method: "POST" },
+  )
+}
+
+export function gmailConnectUrl() {
+  return apiPath("/integrations/gmail/connect")
+}
+
+export function getGmailStatus() {
+  return fetchJson<GmailStatus>("/integrations/gmail/status")
+}
+
+export function syncGmail() {
+  return fetchJson<GmailSyncResult>("/integrations/gmail/sync", {
+    method: "POST",
+    body: JSON.stringify({ user_id: 1 }),
+  })
+}
+
+export function disconnectGmail() {
+  return fetchVoid("/integrations/gmail/disconnect", { method: "DELETE" })
+}
+
+export function listExtractedCandidates({ status }: ListExtractedCandidatesOptions = {}) {
+  const params = new URLSearchParams()
+  if (status) params.set("status", status)
+  const query = params.toString()
+  return fetchJson<ExtractedTaskCandidate[]>(
+    query ? `/integrations/gmail/candidates?${query}` : "/integrations/gmail/candidates",
+  )
+}
+
+export function acceptExtractedCandidate(
+  candidateId: number,
+  input: ExtractedTaskCandidateAcceptInput = {},
+) {
+  return fetchJson<Task>(`/integrations/gmail/candidates/${candidateId}/accept`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function rejectExtractedCandidate(candidateId: number, reason?: string) {
+  return fetchJson<ExtractedTaskCandidate>(`/integrations/gmail/candidates/${candidateId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export function getNotificationPreferences() {
+  return fetchJson<NotificationPreference[]>("/notifications/preferences")
+}
+
+export function updateNotificationPreference(
+  channel: NotificationChannel,
+  input: NotificationPreferenceUpdateInput,
+) {
+  return fetchJson<NotificationPreference>(`/notifications/preferences/${channel}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
+
+export function listScheduledNotifications({
+  startFrom,
+  endTo,
+  status,
+}: ListScheduledNotificationsOptions = {}) {
+  const params = new URLSearchParams()
+  if (startFrom) params.set("start_from", startFrom.toISOString())
+  if (endTo) params.set("end_to", endTo.toISOString())
+  if (status) params.set("status", status)
+  const query = params.toString()
+  return fetchJson<ScheduledNotification[]>(
+    query ? `/notifications/scheduled?${query}` : "/notifications/scheduled",
+  )
+}
+
+export function runDispatchNotifications(now?: Date) {
+  const params = new URLSearchParams()
+  if (now) params.set("now", now.toISOString())
+  const query = params.toString()
+  return fetchJson<NotificationDispatchResult>(
+    query ? `/notifications/run-dispatch?${query}` : "/notifications/run-dispatch",
+    { method: "POST" },
+  )
+}
+
+export function listWebPushSubscriptions() {
+  return fetchJson<WebPushSubscriptionRead[]>("/notifications/web-push/subscriptions")
+}
+
+export async function getWebPushPublicKey() {
+  const result = await fetchJson<{ public_key: string | null }>("/notifications/web-push/public-key")
+  return result.public_key
+}
+
+export function subscribeToWebPush(subscription: PushSubscription | PushSubscriptionJSON) {
+  const json = "toJSON" in subscription ? subscription.toJSON() : subscription
+  return fetchJson<WebPushSubscriptionRead>("/notifications/web-push/subscribe", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: 1,
+      endpoint: json.endpoint,
+      p256dh: json.keys?.p256dh,
+      auth: json.keys?.auth,
+    }),
+  })
+}
+
+export function unsubscribeFromWebPush(subscriptionId: number) {
+  return fetchVoid(`/notifications/web-push/${subscriptionId}`, { method: "DELETE" })
 }

@@ -24,6 +24,7 @@ class GeneratedPlanItemStatus(str, enum.Enum):
     skipped = "skipped"
     moved = "moved"
     failed = "failed"
+    cancelled = "cancelled"
 
 
 class GeneratedPlan(Base):
@@ -115,3 +116,8 @@ class GeneratedPlanItem(Base):
 
     plan = relationship("GeneratedPlan", back_populates="items")
     day = relationship("GeneratedPlanDay", back_populates="items")
+    scheduled_notifications = relationship(
+        "ScheduledNotification",
+        back_populates="generated_plan_item",
+        cascade="all, delete-orphan",
+    )

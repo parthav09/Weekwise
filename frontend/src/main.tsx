@@ -8,6 +8,10 @@ import { applyTheme, getStoredTheme } from "./lib/theme"
 
 applyTheme(getStoredTheme())
 
+if ("serviceWorker" in navigator) {
+  void navigator.serviceWorker.register("/sw.js").catch(() => undefined)
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>

@@ -1,9 +1,10 @@
 import { Plus, Calendar, Clock, MoreHorizontal, CheckCircle2, Pencil, Trash2 } from "lucide-react"
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react"
+import { Link } from "react-router-dom"
 
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
-import { createTask, deleteTask, listTasks, updateTask } from "../lib/api"
+import { createTask, deleteTask, listExtractedCandidates, listTasks, updateTask } from "../lib/api"
 import type {
   Task,
   TaskCategory,
@@ -88,6 +89,7 @@ export function TasksPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
+  const [pendingEmailTaskCount, setPendingEmailTaskCount] = useState(0)
 
   const [form, setForm] = useState<TaskFormValues>({
     title: "",
@@ -105,7 +107,12 @@ export function TasksPage() {
     setIsLoading(true)
     setError(null)
     try {
-      setTasks(await listTasks())
+      const [taskList, emailCandidates] = await Promise.all([
+        listTasks(),
+        listExtractedCandidates({ status: "pending" }),
+      ])
+      setTasks(taskList)
+      setPendingEmailTaskCount(emailCandidates.length)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't load tasks")
     } finally {
@@ -224,6 +231,18 @@ export function TasksPage() {
         >
           {error}
         </div>
+      ) : null}
+
+      {pendingEmailTaskCount > 0 ? (
+        <Link
+          to="/inbox"
+          className="flex items-center justify-between rounded-xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-primary shadow-sm"
+        >
+          <span>
+            {pendingEmailTaskCount} email task{pendingEmailTaskCount === 1 ? "" : "s"} waiting
+          </span>
+          <span className="font-medium">Review</span>
+        </Link>
       ) : null}
 
       {showAddForm && (

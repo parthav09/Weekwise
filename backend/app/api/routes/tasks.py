@@ -5,24 +5,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.task import Task
-from app.models.task import TaskStatus
+from app.models.task import Task, TaskStatus
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
-from app.services.dev_user import ensure_dev_user
+from app.services.tasks import create_task_record
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 @router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
 def create_task(payload: TaskCreate, db: Session = Depends(get_db)) -> Task:
-    ensure_dev_user(db, payload.user_id)
-    task = Task(**payload.model_dump())
-    if task.status == TaskStatus.done and task.completed_at is None:
-        task.completed_at = datetime.now(timezone.utc)
-    db.add(task)
-    db.commit()
-    db.refresh(task)
-    return task
+    return create_task_record(db, payload)
 
 
 @router.get("", response_model=list[TaskRead])

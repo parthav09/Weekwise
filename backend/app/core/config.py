@@ -16,6 +16,34 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     ai_planner_model: str = "gemini-2.5-flash"
 
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str = (
+        "http://localhost:8000/api/integrations/google-calendar/callback"
+    )
+    google_calendar_scopes: str = (
+        "openid email "
+        "https://www.googleapis.com/auth/calendar.readonly "
+        "https://www.googleapis.com/auth/calendar.events"
+    )
+    gmail_redirect_uri: str = "http://localhost:8000/api/integrations/gmail/callback"
+    gmail_scopes: str = "openid email https://www.googleapis.com/auth/gmail.readonly"
+    gmail_sync_lookback_days: int = 7
+    gmail_sync_max_messages: int = 50
+    email_extractor_model: str | None = None
+    frontend_app_url: str = "http://localhost:5173"
+
+    notifications_enabled: bool = False
+    notification_default_lead_minutes: int = 10
+    smtp_host: str | None = None
+    smtp_port: int | None = None
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    web_push_vapid_public_key: str | None = None
+    web_push_vapid_private_key: str | None = None
+    web_push_contact_email: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env", env_file_encoding="utf-8"
     )
@@ -37,6 +65,22 @@ class Settings(BaseSettings):
             origin.strip()
             for origin in self.backend_cors_origins.split(",")
             if origin.strip()
+        ]
+
+    @property
+    def google_scopes(self) -> list[str]:
+        return [
+            scope.strip()
+            for scope in self.google_calendar_scopes.replace(",", " ").split()
+            if scope.strip()
+        ]
+
+    @property
+    def gmail_scope_list(self) -> list[str]:
+        return [
+            scope.strip()
+            for scope in self.gmail_scopes.replace(",", " ").split()
+            if scope.strip()
         ]
 
 

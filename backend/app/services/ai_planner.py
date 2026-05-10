@@ -72,6 +72,7 @@ across the requested window using the structured input provided.
 
 Hard constraints (never violate):
 - Do NOT place any block during a life block whose block_type is "blocked".
+- Do NOT place any task or habit during an external_busy_blocks window.
 - Place tasks with schedule_flexibility "fixed" exactly at their due_date.
 - Do NOT schedule a habit on any date listed in its completed_dates_in_window.
 - Keep all task and habit blocks inside the day_start..day_end window.
@@ -92,6 +93,7 @@ Output:
 - One PlanDay per date inside the window, in chronological order. days may be empty if nothing fits.
 - For each block: include type ("task" / "habit" / "life"), title, source_id (the task/habit/life-block id) when applicable, and a small metadata dict.
 - Include "life" blocks for every life-block occurrence you respected, copying its title and times.
+- Do not include external_busy_blocks in the output; they are read-only availability context.
 - Use the notes array for short warnings like 'no time for X'.
 """
 
@@ -166,6 +168,17 @@ def _build_payload(ctx: PlanningContext) -> dict[str, Any]:
         "tasks": tasks_payload,
         "habits": habits_payload,
         "life_blocks_expanded": life_payload,
+        "external_busy_blocks": [
+            {
+                "id": block.id,
+                "title": block.title,
+                "source": block.source,
+                "start": ensure_aware(block.start).isoformat(),
+                "end": ensure_aware(block.end).isoformat(),
+                "metadata": block.metadata,
+            }
+            for block in ctx.external_busy_blocks
+        ],
     }
 
 
@@ -283,6 +296,7 @@ def _parse_response(raw: str, ctx: PlanningContext) -> PlanRead:
 
     if not plan.days:
         raise AiPlannerError("gemini returned an empty plan")
+    _raise_if_external_busy_conflict(plan, ctx)
     return plan
 
 
@@ -323,3 +337,23 @@ def _coerce_days(raw_days: list[Any], ctx: PlanningContext) -> list[dict[str, An
         blocks.sort(key=lambda b: b["start"])
         out.append({"date": day_date, "blocks": blocks})
     return out
+
+
+def _raise_if_external_busy_conflict(plan: PlanRead, ctx: PlanningContext) -> None:
+    busy = [
+        (ensure_aware(block.start), ensure_aware(block.end), block.title)
+        for block in ctx.external_busy_blocks
+    ]
+    if not busy:
+        return
+    for day in plan.days:
+        for block in day.blocks:
+            if block.type not in {"task", "habit"}:
+                continue
+            block_start = ensure_aware(block.start)
+            block_end = ensure_aware(block.end)
+            for busy_start, busy_end, busy_title in busy:
+                if block_start < busy_end and block_end > busy_start:
+                    raise AiPlannerError(
+                        f"gemini scheduled {block.title!r} during calendar event {busy_title!r}"
+                    )

@@ -1,6 +1,7 @@
 import {
   Calendar,
   CalendarCheck,
+  Inbox,
   LayoutDashboard,
   ListTodo,
   Plus,
@@ -17,6 +18,7 @@ const navItems = [
   { name: "Overview", href: "/", icon: LayoutDashboard },
   { name: "Today", href: "/today", icon: CalendarCheck },
   { name: "Tasks", href: "/tasks", icon: ListTodo },
+  { name: "Inbox", href: "/inbox", icon: Inbox },
   { name: "Habits", href: "/habits", icon: Repeat },
   { name: "Life", href: "/life-blocks", icon: Shield },
   { name: "Plan", href: "/weekly-plan", icon: Calendar },

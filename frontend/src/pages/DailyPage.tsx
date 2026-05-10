@@ -1,4 +1,5 @@
 import {
+  CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -17,10 +18,13 @@ import { Input } from "../components/ui/input"
 import {
   completeHabit,
   createTask,
+  exportSavedPlanToGoogleCalendar,
   generateDayPlan,
+  listGoogleCalendarEvents,
   listHabitCompletions,
   listHabits,
   listLifeBlocks,
+  listScheduledNotifications,
   listSavedPlans,
   listTasks,
   savePlan,
@@ -28,6 +32,7 @@ import {
   updateSavedPlanItem,
 } from "../lib/api"
 import type {
+  CalendarEvent,
   Habit,
   HabitCompletion,
   LifeBlock,
@@ -36,6 +41,7 @@ import type {
   SavedPlan,
   SavedPlanItem,
   SavedPlanItemUpdateInput,
+  ScheduledNotification,
   Task,
   TaskPriority,
 } from "../lib/api"
@@ -100,6 +106,10 @@ export function DailyPage() {
   const [savingPlan, setSavingPlan] = useState(false)
   const [savedPlans, setSavedPlans] = useState<SavedPlan[]>([])
   const [updatingSavedItemId, setUpdatingSavedItemId] = useState<number | null>(null)
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [scheduledNotifications, setScheduledNotifications] = useState<ScheduledNotification[]>([])
+  const [exportingPlanId, setExportingPlanId] = useState<number | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const [showAdd, setShowAdd] = useState(false)
   const [draftTitle, setDraftTitle] = useState("")
@@ -109,16 +119,20 @@ export function DailyPage() {
     setIsLoading(true)
     setError(null)
     try {
-      const [t, h, c, lb] = await Promise.all([
+      const [t, h, c, lb, events, notifications] = await Promise.all([
         listTasks({ dueFrom: dayStart, dueTo: dayEnd }),
         listHabits(),
         listHabitCompletions(dayStart, dayEnd),
         listLifeBlocks({ startFrom: dayStart, endTo: dayEnd }),
+        listGoogleCalendarEvents(dayStart, dayEnd),
+        listScheduledNotifications({ status: "pending" }),
       ])
       setTasks(t)
       setHabits(h)
       setCompletions(c)
       setLifeBlocks(lb)
+      setCalendarEvents(events)
+      setScheduledNotifications(notifications)
       setSavedPlans(await listSavedPlans({ startFrom: dayStart, endTo: dayEnd }))
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't load this day")
@@ -150,6 +164,14 @@ export function DailyPage() {
     )
   }, [savedPlans, dayKey])
 
+  const pendingNotificationItemIds = useMemo(() => {
+    return new Set(
+      scheduledNotifications
+        .map((notification) => notification.generated_plan_item_id)
+        .filter((id): id is number => id !== null),
+    )
+  }, [scheduledNotifications])
+
   useEffect(() => {
     void loadDay()
   }, [loadDay])
@@ -178,11 +200,29 @@ export function DailyPage() {
     try {
       const saved = await savePlan(plan)
       setSavedPlans((prev) => [saved, ...prev])
+      setScheduledNotifications(await listScheduledNotifications({ status: "pending" }))
       setPlan(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save plan")
     } finally {
       setSavingPlan(false)
+    }
+  }
+
+  async function handleExportSavedPlan(savedPlan: SavedPlan) {
+    setExportingPlanId(savedPlan.id)
+    setError(null)
+    setSuccessMessage(null)
+    try {
+      const result = await exportSavedPlanToGoogleCalendar(savedPlan.id)
+      setSuccessMessage(
+        `Exported ${result.exported_count} item${result.exported_count === 1 ? "" : "s"} to Google Calendar${result.skipped_count ? `; ${result.skipped_count} already exported` : ""}.`,
+      )
+      setSavedPlans(await listSavedPlans({ startFrom: dayStart, endTo: dayEnd }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't export saved plan")
+    } finally {
+      setExportingPlanId(null)
     }
   }
 
@@ -207,6 +247,7 @@ export function DailyPage() {
     try {
       const updated = await updateSavedPlanItem(item.id, input)
       replaceSavedItem(updated)
+      setScheduledNotifications(await listScheduledNotifications({ status: "pending" }))
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't update saved plan item")
     } finally {
@@ -397,12 +438,30 @@ export function DailyPage() {
 
       {savedPlanItems.length > 0 && (
         <section className="space-y-2">
-          <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Saved plan feedback
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Saved plan feedback
+            </h2>
+            <div className="flex flex-wrap gap-1.5">
+              {savedPlans.map((savedPlan) => (
+                <Button
+                  key={savedPlan.id}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={exportingPlanId === savedPlan.id}
+                  onClick={() => handleExportSavedPlan(savedPlan)}
+                >
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  {exportingPlanId === savedPlan.id ? "Exporting..." : `Export #${savedPlan.id}`}
+                </Button>
+              ))}
+            </div>
+          </div>
           <SavedPlanItems
             items={savedPlanItems}
+            pendingNotificationItemIds={pendingNotificationItemIds}
             updatingItemId={updatingSavedItemId}
             onUpdate={handleUpdateSavedItem}
           />
@@ -415,6 +474,12 @@ export function DailyPage() {
           role="alert"
         >
           {error}
+        </div>
+      ) : null}
+
+      {successMessage ? (
+        <div className="rounded-xl border border-success/25 bg-success/10 px-4 py-3 text-sm text-success shadow-sm">
+          {successMessage}
         </div>
       ) : null}
 
@@ -464,6 +529,35 @@ export function DailyPage() {
                 </li>
               )
             })}
+          </ul>
+        </section>
+      )}
+
+      {calendarEvents.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-200">
+            <CalendarDays className="h-3.5 w-3.5" />
+            Google Calendar
+          </h2>
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {calendarEvents.map((event) => (
+              <li
+                key={event.id}
+                className="flex items-center gap-3 rounded-xl border border-sky-300/40 bg-sky-50 p-3 text-sky-900 shadow-sm dark:border-sky-400/20 dark:bg-sky-500/10 dark:text-sky-100"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/70 text-sky-700 dark:bg-sky-950/40 dark:text-sky-200">
+                  <CalendarDays className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{event.title}</p>
+                  <p className="text-xs opacity-75">
+                    {event.is_all_day
+                      ? "All day"
+                      : formatTimeRange(new Date(event.start_at), new Date(event.end_at))}
+                  </p>
+                </div>
+              </li>
+            ))}
           </ul>
         </section>
       )}

@@ -29,6 +29,7 @@ from app.models.task import (
     TaskStatus,
 )
 from app.schemas.plan import PlanBlock, PlanDay, PlanRead
+from app.services.external_busy import ExternalBusyBlock, load_external_busy_blocks
 
 
 _WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -77,6 +78,7 @@ class PlanningContext:
     completions: list[HabitCompletion]
     life_blocks: list[AvailabilityBlock]
     life_occurrences: list[LifeBlockOccurrence]
+    external_busy_blocks: list[ExternalBusyBlock]
 
 
 def load_planning_context(
@@ -104,6 +106,9 @@ def load_planning_context(
         LifeBlockOccurrence(o.block, o.start, o.end)
         for o in _expand_life_blocks(life_blocks, days)
     ]
+    external_busy_blocks = load_external_busy_blocks(
+        db, user_id=user_id, start_at=start_at, end_at=end_at
+    )
 
     return PlanningContext(
         user_id=user_id,
@@ -117,6 +122,7 @@ def load_planning_context(
         completions=completions,
         life_blocks=life_blocks,
         life_occurrences=occurrences,
+        external_busy_blocks=external_busy_blocks,
     )
 
 
@@ -145,6 +151,9 @@ def generate_plan(
     tasks = _load_tasks(db, user_id=user_id, end_at=end_at)
     habits = _load_habits(db, user_id=user_id)
     life_blocks = _load_life_blocks(db, user_id=user_id, start_at=start_at, end_at=end_at)
+    external_busy_blocks = load_external_busy_blocks(
+        db, user_id=user_id, start_at=start_at, end_at=end_at
+    )
     completions = _load_habit_completions(
         db, user_id=user_id, start_at=start_at, end_at=end_at
     )
@@ -157,6 +166,7 @@ def generate_plan(
     occurrences_by_day: dict[date, list[_LifeOccurrence]] = defaultdict(list)
     for occ in occurrences:
         occurrences_by_day[occ.start.date()].append(occ)
+    calendar_busy_by_day = _external_busy_by_day(external_busy_blocks, days)
 
     # Build per-day plan structures.
     plan_days: dict[date, PlanDay] = {d: PlanDay(date=d, blocks=[]) for d in days}
@@ -200,6 +210,7 @@ def generate_plan(
             for o in occurrences_by_day.get(d, [])
             if _is_busy(o.block.block_type)
         ]
+        busy.extend(calendar_busy_by_day.get(d, []))
         free_windows[d] = _subtract(bounds, busy)
 
     # 3) Place fixed tasks first (they pin to due_date).
@@ -215,6 +226,9 @@ def generate_plan(
         if slot.end <= start_at or slot.start >= end_at:
             continue
         d = slot.start.date()
+        if not _fits_any_window(slot, free_windows.get(d, [])):
+            notes.append(f'"{task.title}" is fixed during unavailable time; skipped')
+            continue
         plan_days.setdefault(d, PlanDay(date=d, blocks=[])).blocks.append(
             _task_block(task, slot)
         )
@@ -425,6 +439,26 @@ def _subtract(bounds: _Interval, busy: list[_Interval]) -> list[_Interval]:
                 next_free.append(_Interval(max(b.end, window.start), window.end))
         free = next_free
     return [w for w in free if w.duration > timedelta(0)]
+
+
+def _external_busy_by_day(
+    blocks: Iterable[ExternalBusyBlock], days: list[date]
+) -> dict[date, list[_Interval]]:
+    out: dict[date, list[_Interval]] = defaultdict(list)
+    for block in blocks:
+        start = _ensure_aware(block.start)
+        end = _ensure_aware(block.end)
+        for day in days:
+            if end <= datetime.combine(day, time.min, tzinfo=start.tzinfo):
+                continue
+            if start >= datetime.combine(day + timedelta(days=1), time.min, tzinfo=start.tzinfo):
+                continue
+            out[day].append(_Interval(start, end))
+    return out
+
+
+def _fits_any_window(slot: _Interval, windows: list[_Interval]) -> bool:
+    return any(window.start <= slot.start and slot.end <= window.end for window in windows)
 
 
 def _carve(windows: list[_Interval], used: _Interval) -> list[_Interval]:

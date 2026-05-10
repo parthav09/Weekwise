@@ -24,6 +24,11 @@ from app.schemas.saved_plan import (
 )
 from app.services.ai_planner import AiPlannerError, generate_ai_plan
 from app.services.dev_user import ensure_dev_user
+from app.services.notifications import (
+    cancel_notifications_for_item,
+    reschedule_notifications_for_item,
+    schedule_notifications_for_saved_plan,
+)
 from app.services.planner import generate_plan
 
 router = APIRouter(prefix="/plans", tags=["plans"])
@@ -129,7 +134,9 @@ def _save_plan(
 
     db.add(plan)
     db.commit()
-    return _get_saved_plan(plan.id, db)
+    saved_plan = _get_saved_plan(plan.id, db)
+    schedule_notifications_for_saved_plan(db, saved_plan, lead_minutes=None)
+    return saved_plan
 
 
 def _get_saved_plan(plan_id: int, db: Session) -> GeneratedPlan:
@@ -230,6 +237,17 @@ def update_saved_plan_item(
             item.moved_to_end = None
 
     db.add(item)
-    db.commit()
+    db.flush()
+    if item.status in {
+        GeneratedPlanItemStatus.done,
+        GeneratedPlanItemStatus.skipped,
+        GeneratedPlanItemStatus.failed,
+        GeneratedPlanItemStatus.cancelled,
+    }:
+        cancel_notifications_for_item(db, item.id)
+    elif item.status == GeneratedPlanItemStatus.moved and item.moved_to_start:
+        reschedule_notifications_for_item(db, item)
+    else:
+        db.commit()
     db.refresh(item)
     return _read_item(item)

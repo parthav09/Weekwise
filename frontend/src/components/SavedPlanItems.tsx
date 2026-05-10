@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock3, RotateCcw, SkipForward, XCircle } from "lucide-react"
+import { Bell, CheckCircle2, Clock3, RotateCcw, SkipForward, XCircle } from "lucide-react"
 import { useState } from "react"
 
 import { Button } from "./ui/button"
@@ -10,6 +10,7 @@ interface SavedPlanItemsProps {
   items: SavedPlanItem[]
   updatingItemId: number | null
   compact?: boolean
+  pendingNotificationItemIds?: Set<number>
   onUpdate: (item: SavedPlanItem, input: SavedPlanItemUpdateInput) => void
 }
 
@@ -19,6 +20,7 @@ const statusTone: Record<SavedPlanItemStatus, string> = {
   skipped: "border-warning/25 bg-warning/10 text-warning",
   moved: "border-primary/25 bg-primary/10 text-primary",
   failed: "border-danger/25 bg-danger/10 text-danger",
+  cancelled: "border-border bg-muted text-muted-foreground",
 }
 
 function formatTime(value: string) {
@@ -49,6 +51,7 @@ export function SavedPlanItems({
   items,
   updatingItemId,
   compact = false,
+  pendingNotificationItemIds,
   onUpdate,
 }: SavedPlanItemsProps) {
   const [movingItemId, setMovingItemId] = useState<number | null>(null)
@@ -65,6 +68,7 @@ export function SavedPlanItems({
         const isUpdating = updatingItemId === item.id
         const isTerminal = item.status === "done"
         const isMoving = movingItemId === item.id
+        const hasPendingNotification = pendingNotificationItemIds?.has(item.id) ?? false
 
         function openMoveEditor() {
           setMovingItemId(item.id)
@@ -93,9 +97,19 @@ export function SavedPlanItems({
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className={cn("font-medium leading-snug", isTerminal && "line-through")}>
-                  {item.title}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className={cn("font-medium leading-snug", isTerminal && "line-through")}>
+                    {item.title}
+                  </p>
+                  {hasPendingNotification ? (
+                    <span
+                      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+                      title="Pending reminder"
+                    >
+                      <Bell className="h-3 w-3" />
+                    </span>
+                  ) : null}
+                </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {item.item_type} · {formatTime(item.start_at)} - {formatTime(item.end_at)}
                 </p>
