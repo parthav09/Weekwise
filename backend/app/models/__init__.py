@@ -18,6 +18,17 @@ from app.models.generated_plan import (
     GeneratedPlanItemStatus,
     GeneratedPlanScope,
 )
+from app.models.grocery import (
+    GroceryItemCategory,
+    GroceryItemStatus,
+    GroceryList,
+    GroceryListItem,
+    GroceryListSource,
+    GroceryListStatus,
+    GroceryOrder,
+    GroceryOrderItem,
+    GroceryOrderItemStatus,
+)
 from app.models.habit import Habit, HabitCompletion
 from app.models.notification import (
     NotificationChannel,
@@ -51,6 +62,15 @@ __all__ = [
     "GeneratedPlanItemStatus",
     "GeneratedPlanScope",
     "GmailAccount",
+    "GroceryItemCategory",
+    "GroceryItemStatus",
+    "GroceryList",
+    "GroceryListItem",
+    "GroceryListSource",
+    "GroceryListStatus",
+    "GroceryOrder",
+    "GroceryOrderItem",
+    "GroceryOrderItemStatus",
     "LifeBlockCategory",
     "Habit",
     "HabitCompletion",

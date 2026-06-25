@@ -17,6 +17,8 @@ import {
   type TaskPriority,
   type TaskScheduleFlexibility,
 } from "../lib/api"
+import { warnError } from "../lib/browserWarnings"
+import { parseLocalDateKey } from "../lib/dates"
 import { cn } from "../lib/utils"
 
 const tabs: { id: ExtractedTaskCandidateStatus; label: string }[] = [
@@ -28,21 +30,26 @@ const tabs: { id: ExtractedTaskCandidateStatus; label: string }[] = [
 const selectClass =
   "h-10 rounded-xl border border-border bg-card px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
 
+function dateOnlyToLocalNoonIso(value: string) {
+  if (!value) return null
+  const date = parseLocalDateKey(value)
+  date.setHours(12, 0, 0, 0)
+  return date.toISOString()
+}
+
 export function InboxPage() {
   const [activeTab, setActiveTab] = useState<ExtractedTaskCandidateStatus>("pending")
   const [candidates, setCandidates] = useState<ExtractedTaskCandidate[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   async function loadCandidates(status = activeTab) {
     setIsLoading(true)
-    setError(null)
     try {
       setCandidates(await listExtractedCandidates({ status }))
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't load email tasks")
+      warnError(err, "Couldn't load email tasks")
     } finally {
       setIsLoading(false)
     }
@@ -54,7 +61,6 @@ export function InboxPage() {
 
   async function handleSync() {
     setIsSyncing(true)
-    setError(null)
     setMessage(null)
     try {
       const result = await syncGmail()
@@ -63,7 +69,7 @@ export function InboxPage() {
       )
       await loadCandidates(activeTab)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't sync Gmail")
+      warnError(err, "Couldn't sync Gmail")
     } finally {
       setIsSyncing(false)
     }
@@ -99,12 +105,6 @@ export function InboxPage() {
           {message}
         </div>
       ) : null}
-      {error ? (
-        <div className="rounded-xl border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger">
-          {error}
-        </div>
-      ) : null}
-
       <div className="flex gap-2 rounded-xl border border-border/80 bg-card/90 p-1 shadow-sm">
         {tabs.map((tab) => (
           <button
@@ -178,20 +178,18 @@ function CandidateCard({ candidate, readonly, onAccepted, onRejected }: Candidat
     candidate.suggested_estimated_minutes != null ? String(candidate.suggested_estimated_minutes) : "",
   )
   const [isBusy, setIsBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   async function handleAccept(e: FormEvent) {
     e.preventDefault()
     if (!title.trim()) return
     setIsBusy(true)
-    setError(null)
     try {
       await acceptExtractedCandidate(candidate.id, {
         overrides: {
           title: title.trim(),
           description: description.trim() || null,
           priority,
-          due_date: dueDate ? `${dueDate}T09:00:00.000Z` : null,
+          due_date: dateOnlyToLocalNoonIso(dueDate),
           estimated_minutes: parseMinutes(estimatedMinutes),
           energy_level: energyLevel,
           category,
@@ -200,7 +198,7 @@ function CandidateCard({ candidate, readonly, onAccepted, onRejected }: Candidat
       })
       await onAccepted()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't accept candidate")
+      warnError(err, "Couldn't accept candidate")
     } finally {
       setIsBusy(false)
     }
@@ -208,12 +206,11 @@ function CandidateCard({ candidate, readonly, onAccepted, onRejected }: Candidat
 
   async function handleReject() {
     setIsBusy(true)
-    setError(null)
     try {
       await rejectExtractedCandidate(candidate.id)
       await onRejected()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't reject candidate")
+      warnError(err, "Couldn't reject candidate")
     } finally {
       setIsBusy(false)
     }
@@ -287,8 +284,6 @@ function CandidateCard({ candidate, readonly, onAccepted, onRejected }: Candidat
           <p className="mt-2 leading-relaxed">{candidate.email_message.snippet}</p>
         </details>
       ) : null}
-      {error ? <p className="mt-3 text-xs text-danger">{error}</p> : null}
-
       {!readonly ? (
         <div className="mt-4 flex justify-end gap-2">
           <Button type="button" variant="outline" disabled={isBusy} onClick={handleReject}>

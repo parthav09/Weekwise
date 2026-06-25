@@ -54,3 +54,9 @@ class User(Base):
     extracted_task_candidates = relationship(
         "ExtractedTaskCandidate", back_populates="user", cascade="all, delete-orphan"
     )
+    grocery_lists = relationship(
+        "GroceryList", back_populates="user", cascade="all, delete-orphan"
+    )
+    grocery_orders = relationship(
+        "GroceryOrder", back_populates="user", cascade="all, delete-orphan"
+    )

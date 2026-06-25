@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Iterable
+from typing import Any, Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -25,7 +25,6 @@ from app.models.task import (
     Task,
     TaskEnergyLevel,
     TaskPriority,
-    TaskScheduleFlexibility,
     TaskStatus,
 )
 from app.schemas.plan import PlanBlock, PlanDay, PlanRead
@@ -35,6 +34,118 @@ from app.services.external_busy import ExternalBusyBlock, load_external_busy_blo
 _WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 _BUFFER = timedelta(minutes=5)
 _DEFAULT_TASK_MIN = 30
+_MEAL_SLOTS = (
+    ("breakfast", time(9, 0), timedelta(minutes=30), 120),
+    ("lunch", time(12, 45), timedelta(minutes=35), 120),
+    ("dinner", time(18, 30), timedelta(minutes=45), 150),
+)
+_RULE_MEALS: dict[str, tuple[dict[str, Any], ...]] = {
+    "breakfast": (
+        {
+            "title": "Greek yogurt oats with berries",
+            "science_rationale": "Protein, fiber, and slow carbs make this a steady post-workout or deep-work breakfast.",
+            "notes": "Stir yogurt, oats, berries, and chia. Add milk or water to loosen, then top with nuts if available.",
+            "ingredients": [
+                {"name": "Greek yogurt", "category": "dairy"},
+                {"name": "rolled oats", "category": "pantry"},
+                {"name": "berries", "category": "produce"},
+                {"name": "chia seeds", "category": "pantry"},
+            ],
+        },
+        {
+            "title": "Egg and spinach avocado toast",
+            "science_rationale": "Eggs and whole-grain carbs support satiety while spinach adds micronutrients.",
+            "notes": "Scramble eggs with spinach. Serve on toast with avocado and fruit on the side if available.",
+            "ingredients": [
+                {"name": "eggs", "category": "dairy"},
+                {"name": "spinach", "category": "produce"},
+                {"name": "whole-grain bread", "category": "pantry"},
+                {"name": "avocado", "category": "produce"},
+            ],
+        },
+        {
+            "title": "Banana peanut butter protein smoothie",
+            "science_rationale": "Easy carbs plus protein make this realistic when the morning is tight.",
+            "notes": "Blend banana, milk, peanut butter, and protein or yogurt. Add ice and oats for a thicker smoothie.",
+            "ingredients": [
+                {"name": "banana", "category": "produce"},
+                {"name": "milk", "category": "dairy"},
+                {"name": "peanut butter", "category": "pantry"},
+                {"name": "protein powder or Greek yogurt", "category": "dairy"},
+            ],
+        },
+    ),
+    "lunch": (
+        {
+            "title": "Chicken rice bowl with roasted vegetables",
+            "science_rationale": "Lean protein, rice, and vegetables make this a practical midday recovery meal.",
+            "notes": "Warm rice and chicken. Add roasted vegetables, olive oil, and a quick yogurt or salsa sauce.",
+            "ingredients": [
+                {"name": "chicken", "category": "meat"},
+                {"name": "rice", "category": "pantry"},
+                {"name": "mixed vegetables", "category": "produce"},
+                {"name": "olive oil", "category": "pantry"},
+            ],
+        },
+        {
+            "title": "Turkey avocado whole-wheat wrap",
+            "science_rationale": "Portable protein and carbs keep lunch realistic without a heavy afternoon crash.",
+            "notes": "Layer turkey, avocado, greens, and yogurt sauce in a tortilla. Add fruit or carrots on the side.",
+            "ingredients": [
+                {"name": "turkey", "category": "meat"},
+                {"name": "whole-wheat tortilla", "category": "pantry"},
+                {"name": "avocado", "category": "produce"},
+                {"name": "greens", "category": "produce"},
+            ],
+        },
+        {
+            "title": "Lentil quinoa salad with feta",
+            "science_rationale": "Legumes and quinoa provide protein, fiber, and durable energy for the afternoon.",
+            "notes": "Toss lentils, quinoa, chopped vegetables, feta, and vinaigrette. Make extra for tomorrow.",
+            "ingredients": [
+                {"name": "lentils", "category": "pantry"},
+                {"name": "quinoa", "category": "pantry"},
+                {"name": "cucumber and tomato", "category": "produce"},
+                {"name": "feta", "category": "dairy"},
+            ],
+        },
+    ),
+    "dinner": (
+        {
+            "title": "Salmon, sweet potato, and broccoli plate",
+            "science_rationale": "Omega-3 fats, complex carbs, and vegetables support recovery after a full day.",
+            "notes": "Roast sweet potato and broccoli. Pan-sear salmon, then finish with lemon or yogurt sauce.",
+            "ingredients": [
+                {"name": "salmon", "category": "meat"},
+                {"name": "sweet potato", "category": "produce"},
+                {"name": "broccoli", "category": "produce"},
+                {"name": "lemon", "category": "produce"},
+            ],
+        },
+        {
+            "title": "Turkey chili with beans",
+            "science_rationale": "High-protein chili is filling, batchable, and useful for the next day's leftovers.",
+            "notes": "Simmer turkey, beans, tomatoes, and spices. Serve with rice or a tortilla if training was hard.",
+            "ingredients": [
+                {"name": "ground turkey", "category": "meat"},
+                {"name": "beans", "category": "pantry"},
+                {"name": "tomatoes", "category": "produce"},
+                {"name": "rice or tortilla", "category": "pantry"},
+            ],
+        },
+        {
+            "title": "Tofu vegetable stir-fry with brown rice",
+            "science_rationale": "Plant protein, vegetables, and brown rice make a balanced lighter dinner.",
+            "notes": "Sear tofu until crisp. Stir-fry vegetables, add sauce, and serve over brown rice.",
+            "ingredients": [
+                {"name": "tofu", "category": "other"},
+                {"name": "brown rice", "category": "pantry"},
+                {"name": "stir-fry vegetables", "category": "produce"},
+                {"name": "soy ginger sauce", "category": "pantry"},
+            ],
+        },
+    ),
+}
 
 
 @dataclass
@@ -131,6 +242,21 @@ def ensure_aware(dt: datetime) -> datetime:
     return _ensure_aware(dt)
 
 
+def effective_planning_start(
+    start_at: datetime,
+    end_at: datetime,
+    *,
+    now: datetime | None = None,
+) -> datetime:
+    """Return the first instant where new scheduled blocks may be placed."""
+    start_at = _ensure_aware(start_at)
+    end_at = _ensure_aware(end_at)
+    current = _ensure_aware(now) if now is not None else datetime.now(start_at.tzinfo)
+    if start_at < current < end_at:
+        return _round_up_to_next_five_minutes(current)
+    return start_at
+
+
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
@@ -144,25 +270,35 @@ def generate_plan(
     end_at: datetime,
     day_window: tuple[time, time] = (time(8), time(22)),
 ) -> PlanRead:
-    start_at = _ensure_aware(start_at)
-    end_at = _ensure_aware(end_at)
-    day_start, day_end = day_window
-
-    tasks = _load_tasks(db, user_id=user_id, end_at=end_at)
-    habits = _load_habits(db, user_id=user_id)
-    life_blocks = _load_life_blocks(db, user_id=user_id, start_at=start_at, end_at=end_at)
-    external_busy_blocks = load_external_busy_blocks(
-        db, user_id=user_id, start_at=start_at, end_at=end_at
+    context = load_planning_context(
+        db,
+        user_id=user_id,
+        start_at=start_at,
+        end_at=end_at,
+        day_window=day_window,
     )
-    completions = _load_habit_completions(
-        db, user_id=user_id, start_at=start_at, end_at=end_at
-    )
+    return generate_plan_from_context(context)
 
-    days = _enumerate_days(start_at, end_at)
+
+def generate_plan_from_context(context: PlanningContext) -> PlanRead:
+    start_at = context.start_at
+    end_at = context.end_at
+    scheduling_start_at = effective_planning_start(start_at, end_at)
+    day_start = context.day_start
+    day_end = context.day_end
+    tasks = context.tasks
+    habits = context.habits
+    external_busy_blocks = context.external_busy_blocks
+    completions = context.completions
+    days = context.days
+    scheduling_days = [d for d in days if d >= scheduling_start_at.date()]
     notes: list[str] = []
 
-    # Expand life-block recurrences into concrete occurrences.
-    occurrences = _expand_life_blocks(life_blocks, days)
+    # Use already-expanded life-block recurrences from the planning context.
+    occurrences = [
+        _LifeOccurrence(occ.block, occ.start, occ.end)
+        for occ in context.life_occurrences
+    ]
     occurrences_by_day: dict[date, list[_LifeOccurrence]] = defaultdict(list)
     for occ in occurrences:
         occurrences_by_day[occ.start.date()].append(occ)
@@ -200,7 +336,7 @@ def generate_plan(
             _at(d, day_end, start_at.tzinfo),
         )
         # Clip to the request window.
-        bounds.start = max(bounds.start, start_at)
+        bounds.start = max(bounds.start, scheduling_start_at)
         bounds.end = min(bounds.end, end_at)
         if bounds.end <= bounds.start:
             free_windows[d] = []
@@ -213,35 +349,17 @@ def generate_plan(
         busy.extend(calendar_busy_by_day.get(d, []))
         free_windows[d] = _subtract(bounds, busy)
 
-    # 3) Place fixed tasks first (they pin to due_date).
-    fixed_tasks, flexible_tasks = _split_fixed(tasks)
+    # 3) Add realistic meal anchors before tasks/habits fill the day.
+    _place_rule_meals(plan_days, free_windows, scheduling_days, scheduling_start_at, end_at, notes)
 
-    for task in fixed_tasks:
-        if task.due_date is None:
-            notes.append(f'"{task.title}" is fixed but has no due date; skipped')
-            continue
-        slot = _slot_for_fixed(task)
-        if slot is None:
-            continue
-        if slot.end <= start_at or slot.start >= end_at:
-            continue
-        d = slot.start.date()
-        if not _fits_any_window(slot, free_windows.get(d, [])):
-            notes.append(f'"{task.title}" is fixed during unavailable time; skipped')
-            continue
-        plan_days.setdefault(d, PlanDay(date=d, blocks=[])).blocks.append(
-            _task_block(task, slot)
-        )
-        if d in free_windows and free_windows[d]:
-            free_windows[d] = _carve(free_windows[d], slot)
-
-    # 4) Place flexible tasks greedily by score.
+    # 4) Place all tasks greedily by score. Task due times are treated as
+    # deadline/context only; the planner chooses the actual work slot.
     scored = sorted(
-        flexible_tasks, key=lambda t: _task_score(t, start_at), reverse=True
+        tasks, key=lambda t: _task_score(t, scheduling_start_at), reverse=True
     )
     for task in scored:
         duration = timedelta(minutes=task.estimated_minutes or _DEFAULT_TASK_MIN)
-        placed = _place_task(task, duration, free_windows, days)
+        placed = _place_task(task, duration, free_windows, scheduling_days)
         if placed is None:
             notes.append(f'No room for "{task.title}" this period')
             continue
@@ -261,7 +379,9 @@ def generate_plan(
         if remaining == 0:
             continue
         candidate_days = [
-            d for d in days if d not in week_completions.get(habit.id, set())
+            d
+            for d in scheduling_days
+            if d not in week_completions.get(habit.id, set())
         ]
         if not candidate_days:
             notes.append(f'"{habit.title}" already completed enough times')
@@ -365,6 +485,16 @@ def _ensure_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def _round_up_to_next_five_minutes(dt: datetime) -> datetime:
+    rounded = dt.replace(second=0, microsecond=0)
+    if dt > rounded:
+        rounded += timedelta(minutes=1)
+    remainder = rounded.minute % 5
+    if remainder:
+        rounded += timedelta(minutes=5 - remainder)
+    return rounded
 
 
 def _at(d: date, t: time, tz: timezone | None) -> datetime:
@@ -475,25 +605,6 @@ def _carve(windows: list[_Interval], used: _Interval) -> list[_Interval]:
     return [w for w in out if w.duration >= timedelta(minutes=10)]
 
 
-def _split_fixed(tasks: list[Task]) -> tuple[list[Task], list[Task]]:
-    fixed: list[Task] = []
-    flexible: list[Task] = []
-    for t in tasks:
-        if t.schedule_flexibility == TaskScheduleFlexibility.fixed:
-            fixed.append(t)
-        else:
-            flexible.append(t)
-    return fixed, flexible
-
-
-def _slot_for_fixed(task: Task) -> _Interval | None:
-    if task.due_date is None:
-        return None
-    duration = timedelta(minutes=task.estimated_minutes or _DEFAULT_TASK_MIN)
-    start = _ensure_aware(task.due_date)
-    return _Interval(start, start + duration)
-
-
 def _task_score(task: Task, now: datetime) -> float:
     priority_score = {
         TaskPriority.urgent: 100,
@@ -503,7 +614,9 @@ def _task_score(task: Task, now: datetime) -> float:
     }[task.priority]
     deadline_bonus = 0.0
     if task.due_date is not None:
-        delta = _ensure_aware(task.due_date) - now
+        due = _ensure_aware(task.due_date)
+        due_day_end = datetime.combine(due.date(), time.max, tzinfo=due.tzinfo)
+        delta = due_day_end - now
         hours = max(delta.total_seconds() / 3600.0, 0.0)
         if hours <= 48:
             deadline_bonus = 50 - min(hours, 48)
@@ -565,6 +678,91 @@ def _place_habit(
         if window.duration >= duration:
             return _Interval(window.start, window.start + duration)
     return None
+
+
+def _place_rule_meals(
+    plan_days: dict[date, PlanDay],
+    free_windows: dict[date, list[_Interval]],
+    days: list[date],
+    start_at: datetime,
+    end_at: datetime,
+    notes: list[str],
+) -> None:
+    tz = start_at.tzinfo
+    for day_index, day in enumerate(days):
+        for meal_type, preferred_time, duration, max_shift_minutes in _MEAL_SLOTS:
+            preferred_start = _at(day, preferred_time, tz)
+            if preferred_start + duration <= start_at or preferred_start >= end_at:
+                continue
+            slot = _place_meal_near(
+                preferred_start,
+                duration,
+                free_windows.get(day, []),
+                max_shift_minutes=max_shift_minutes,
+            )
+            if slot is None:
+                if _has_meaningful_free_time(free_windows.get(day, []), duration):
+                    notes.append(f"No realistic {meal_type} slot found on {day.isoformat()}")
+                continue
+            plan_days.setdefault(day, PlanDay(date=day, blocks=[])).blocks.append(
+                _meal_block(meal_type, day_index, slot)
+            )
+            free_windows[day] = _carve(free_windows.get(day, []), slot)
+
+
+def _place_meal_near(
+    preferred_start: datetime,
+    duration: timedelta,
+    windows: list[_Interval],
+    *,
+    max_shift_minutes: int,
+) -> _Interval | None:
+    candidates: list[tuple[float, datetime]] = []
+    for window in windows:
+        latest_start = window.end - duration
+        if latest_start < window.start:
+            continue
+        start = min(max(preferred_start, window.start), latest_start)
+        shift_minutes = abs((start - preferred_start).total_seconds()) / 60
+        if shift_minutes <= max_shift_minutes:
+            candidates.append((shift_minutes, start))
+    if not candidates:
+        return None
+    _, start = min(candidates, key=lambda candidate: candidate[0])
+    return _Interval(start, start + duration)
+
+
+def _has_meaningful_free_time(windows: list[_Interval], duration: timedelta) -> bool:
+    return any(window.duration >= duration for window in windows)
+
+
+def _meal_block(meal_type: str, day_index: int, slot: _Interval) -> PlanBlock:
+    recipe = _RULE_MEALS[meal_type][day_index % len(_RULE_MEALS[meal_type])]
+    ingredients = [
+        {
+            "name": ingredient["name"],
+            "category": ingredient.get("category", "other"),
+            "quantity": None,
+            "unit": None,
+            "on_hand": False,
+            "notes": None,
+        }
+        for ingredient in recipe["ingredients"]
+    ]
+    return PlanBlock(
+        start=slot.start,
+        end=slot.end,
+        type="meal",
+        title=recipe["title"],
+        source_id=None,
+        metadata={
+            "meal_type": meal_type,
+            "science_rationale": recipe["science_rationale"],
+            "notes": recipe["notes"],
+            "ingredients": ingredients,
+            "source": "rule_meal_anchor",
+        },
+    )
 
 
 def _habit_window_key(window: _Interval, habit: Habit) -> float:

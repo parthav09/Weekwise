@@ -105,15 +105,9 @@ export interface LifeBlockCreateInput {
 export type LifeBlockUpdateInput = Partial<LifeBlockCreateInput>
 
 export type PlanGenerator = "rules" | "ai"
-export type PlanBlockType = "task" | "habit" | "life"
-export type SavedPlanScope = "day" | "week"
-export type SavedPlanItemStatus =
-  | "planned"
-  | "done"
-  | "skipped"
-  | "moved"
-  | "failed"
-  | "cancelled"
+export type PlanBlockType = "task" | "habit" | "life" | "meal"
+export type PlanScope = "day" | "week"
+export type ActivePlanItemStatus = "planned" | "done" | "skipped" | "moved" | "failed"
 
 export interface PlanBlock {
   start: string
@@ -138,57 +132,31 @@ export interface PlanRead {
   notes: string[]
 }
 
-export interface SavedPlanItem {
-  id: number
-  generated_plan_id: number
-  generated_plan_day_id: number
-  title: string
-  item_type: PlanBlockType | string
-  source_id: number | null
-  start_at: string
-  end_at: string
-  status: SavedPlanItemStatus
-  feedback_reason: string | null
-  moved_to_start: string | null
-  moved_to_end: string | null
-  metadata: Record<string, unknown>
-  created_at: string
-  updated_at: string
-}
-
-export interface SavedPlanDay {
+export interface ActivePlanBlock extends PlanBlock {
   id: number
   generated_plan_id: number
   date: string
-  items: SavedPlanItem[]
-  created_at: string
+  status: ActivePlanItemStatus
+  feedback_reason: string | null
+  moved_to_start: string | null
+  moved_to_end: string | null
 }
 
-export interface SavedPlan {
+export interface ActivePlanDay {
+  date: string
+  blocks: ActivePlanBlock[]
+}
+
+export interface ActivePlanRead {
   id: number
   user_id: number
-  scope: SavedPlanScope
+  scope: PlanScope
+  generated_at: string
   generator: PlanGenerator
   start_at: string
   end_at: string
+  days: ActivePlanDay[]
   notes: string[]
-  plan: PlanRead
-  days: SavedPlanDay[]
-  created_at: string
-  updated_at: string
-}
-
-export interface ListSavedPlansOptions {
-  scope?: SavedPlanScope
-  startFrom?: Date
-  endTo?: Date
-}
-
-export interface SavedPlanItemUpdateInput {
-  status?: SavedPlanItemStatus
-  feedback_reason?: string | null
-  moved_to_start?: string | null
-  moved_to_end?: string | null
 }
 
 export interface CalendarStatus {
@@ -214,12 +182,6 @@ export interface CalendarSyncResult {
   synced_count: number
   calendar_id: string
   synced_at: string
-}
-
-export interface CalendarExportResult {
-  exported_count: number
-  skipped_count: number
-  event_ids: string[]
 }
 
 export interface GmailStatus {
@@ -281,6 +243,188 @@ export interface ExtractedTaskCandidateOverrides {
 
 export interface ExtractedTaskCandidateAcceptInput {
   overrides?: ExtractedTaskCandidateOverrides
+}
+
+export type GroceryListStatus = "draft" | "shopping" | "ordered" | "archived"
+export type GroceryListSource = "manual" | "ai" | "plan"
+export type GroceryItemStatus = "needed" | "in_cart" | "purchased" | "skipped"
+export type GroceryItemCategory =
+  | "produce"
+  | "dairy"
+  | "meat"
+  | "pantry"
+  | "frozen"
+  | "beverages"
+  | "household"
+  | "other"
+export type GroceryOrderItemStatus = "ordered" | "substituted" | "refunded"
+
+export interface GroceryListItem {
+  id: number
+  grocery_list_id: number
+  name: string
+  quantity: number | null
+  unit: string | null
+  category: GroceryItemCategory
+  status: GroceryItemStatus
+  notes: string | null
+  estimated_price: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface GroceryList {
+  id: number
+  user_id: number
+  title: string
+  status: GroceryListStatus
+  source: GroceryListSource
+  generated_plan_id: number | null
+  notes: string | null
+  items: GroceryListItem[]
+  created_at: string
+  updated_at: string
+}
+
+export interface GroceryOrderItem {
+  id: number
+  grocery_order_id: number
+  name: string
+  quantity: number | null
+  unit: string | null
+  unit_price: number | null
+  line_total: number | null
+  status: GroceryOrderItemStatus
+  substitution_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface GroceryOrder {
+  id: number
+  user_id: number
+  grocery_list_id: number | null
+  provider: string
+  provider_order_id: string | null
+  store_name: string | null
+  ordered_at: string
+  delivered_at: string | null
+  subtotal: number | null
+  tax: number | null
+  tip: number | null
+  delivery_fee: number | null
+  total: number | null
+  currency: string
+  source_email_id: number | null
+  notes: string | null
+  items: GroceryOrderItem[]
+  created_at: string
+  updated_at: string
+}
+
+export interface GroceryListCreateInput {
+  title: string
+  status?: GroceryListStatus
+  source?: GroceryListSource
+  generated_plan_id?: number | null
+  notes?: string | null
+}
+
+export type GroceryListUpdateInput = Partial<GroceryListCreateInput>
+
+export interface GroceryListItemCreateInput {
+  name: string
+  quantity?: number | null
+  unit?: string | null
+  category?: GroceryItemCategory
+  status?: GroceryItemStatus
+  notes?: string | null
+  estimated_price?: number | null
+}
+
+export type GroceryListItemUpdateInput = Partial<GroceryListItemCreateInput>
+
+export interface ListGroceryListsOptions {
+  status?: GroceryListStatus
+}
+
+export interface GrocerySuggestInput {
+  start_at?: string | null
+  end_at?: string | null
+  generated_plan_id?: number | null
+}
+
+export interface GrocerySuggestResult {
+  added_count: number
+  list: GroceryList
+}
+
+export interface InstacartHandoff {
+  url: string
+  query: string
+  item_names: string[]
+}
+
+export interface InstacartReceiptSyncResult {
+  fetched_count: number
+  new_order_count: number
+  new_item_count: number
+  skipped_count: number
+  last_synced_at: string | null
+}
+
+export interface PantryItem {
+  name: string
+  quantity: number | null
+  unit: string | null
+  category: GroceryItemCategory
+  last_purchased_at: string
+  order_count: number
+}
+
+export interface PantryRead {
+  lookback_days: number
+  item_count: number
+  items: PantryItem[]
+}
+
+export interface MealPlanIngredient {
+  name: string
+  quantity: number | null
+  unit: string | null
+  category: string
+  on_hand: boolean
+  notes: string | null
+}
+
+export interface MealPlanMeal {
+  title: string
+  meal_type: string
+  ingredients: MealPlanIngredient[]
+  notes: string | null
+}
+
+export interface MealPlanDay {
+  date: string
+  label: string
+  meals: MealPlanMeal[]
+}
+
+export interface MealPlanRead {
+  start_at: string
+  end_at: string
+  pantry_item_count: number
+  days: MealPlanDay[]
+}
+
+export interface MealPlanRequestInput {
+  lookback_days?: number | null
+  start_at?: string | null
+}
+
+export interface MealPlanToGroceryListResult {
+  added_count: number
+  list: GroceryList
 }
 
 export type NotificationChannel = "web_push" | "email" | "inapp"
@@ -351,9 +495,24 @@ export interface PlanRequestInput {
   day_end?: string
 }
 
+export interface ActivePlanRequestInput {
+  user_id?: number
+  scope?: PlanScope
+  start_at: Date
+  end_at: Date
+}
+
+export interface ActivePlanItemUpdateInput {
+  status: ActivePlanItemStatus
+  feedback_reason?: string | null
+  moved_to_start?: string | null
+  moved_to_end?: string | null
+}
+
 export interface ListTasksOptions {
   dueFrom?: Date
   dueTo?: Date
+  includeUnscheduled?: boolean
 }
 
 export interface ListLifeBlocksOptions {
@@ -388,10 +547,11 @@ async function fetchVoid(path: string, init?: RequestInit): Promise<void> {
   await request(path, init)
 }
 
-export function listTasks({ dueFrom, dueTo }: ListTasksOptions = {}) {
+export function listTasks({ dueFrom, dueTo, includeUnscheduled }: ListTasksOptions = {}) {
   const params = new URLSearchParams()
   if (dueFrom) params.set("due_from", toLocalDateKey(dueFrom))
   if (dueTo) params.set("due_to", toLocalDateKey(dueTo))
+  if (includeUnscheduled) params.set("include_unscheduled", "true")
   const query = params.toString()
   return fetchJson<Task[]>(query ? `/tasks?${query}` : "/tasks")
 }
@@ -519,36 +679,85 @@ export function generateDayPlan(input: PlanRequestInput) {
   })
 }
 
-export function savePlan(plan: PlanRead) {
-  return fetchJson<SavedPlan>("/plans/save", {
+export function generateAndSaveActivePlan(input: PlanRequestInput, scope: PlanScope = "week") {
+  const path = scope === "day" ? "/plans/day/active" : "/plans/week/active"
+  return fetchJson<PlanRead>(path, {
     method: "POST",
-    body: JSON.stringify({ user_id: 1, plan }),
+    body: planRequestBody(input),
   })
 }
 
-export function saveWeekPlan(plan: PlanRead) {
-  return savePlan(plan)
+export function saveActivePlan(plan: PlanRead, scope: PlanScope = "week", userId = 1) {
+  return fetchJson<ActivePlanRead>("/plans/active", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId, scope, plan }),
+  })
 }
 
-export function saveDayPlan(plan: PlanRead) {
-  return savePlan(plan)
-}
-
-export function listSavedPlans({ scope, startFrom, endTo }: ListSavedPlansOptions = {}) {
+export function getActivePlan(input: ActivePlanRequestInput) {
   const params = new URLSearchParams()
-  if (scope) params.set("scope", scope)
-  if (startFrom) params.set("start_from", startFrom.toISOString())
-  if (endTo) params.set("end_to", endTo.toISOString())
-  const query = params.toString()
-  return fetchJson<SavedPlan[]>(query ? `/plans/saved?${query}` : "/plans/saved")
+  params.set("user_id", String(input.user_id ?? 1))
+  params.set("scope", input.scope ?? "week")
+  params.set("start_at", toLocalIsoWithOffset(input.start_at))
+  params.set("end_at", toLocalIsoWithOffset(input.end_at))
+  return fetchJson<ActivePlanRead | null>(`/plans/active?${params.toString()}`)
 }
 
-export function getSavedPlan(planId: number) {
-  return fetchJson<SavedPlan>(`/plans/saved/${planId}`)
+export function planReadToOptimisticActivePlan(
+  plan: PlanRead,
+  scope: PlanScope,
+  userId = 1,
+): ActivePlanRead {
+  const planId = -Date.now()
+  let itemId = -1
+  return {
+    id: planId,
+    user_id: userId,
+    scope,
+    generated_at: plan.generated_at,
+    generator: plan.generator,
+    start_at: plan.start_at,
+    end_at: plan.end_at,
+    notes: plan.notes,
+    days: plan.days.map((day) => ({
+      date: day.date,
+      blocks: day.blocks.map((block) => ({
+        ...block,
+        id: itemId--,
+        generated_plan_id: planId,
+        date: day.date,
+        status: "planned",
+        feedback_reason: null,
+        moved_to_start: null,
+        moved_to_end: null,
+      })),
+    })),
+  }
 }
 
-export function updateSavedPlanItem(itemId: number, input: SavedPlanItemUpdateInput) {
-  return fetchJson<SavedPlanItem>(`/plans/items/${itemId}`, {
+export async function waitForActivePlan(
+  input: ActivePlanRequestInput,
+  retries = 6,
+  delayMs = 350,
+  expectedGeneratedAt?: string,
+) {
+  const expectedTime = expectedGeneratedAt ? Date.parse(expectedGeneratedAt) : null
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    const active = await getActivePlan(input)
+    if (
+      active &&
+      (expectedTime == null || Date.parse(active.generated_at) >= expectedTime)
+    ) {
+      return active
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, delayMs))
+  }
+  return null
+}
+
+export function updateActivePlanItem(itemId: number, input: ActivePlanItemUpdateInput, userId = 1) {
+  const params = new URLSearchParams({ user_id: String(userId) })
+  return fetchJson<ActivePlanBlock>(`/plans/items/${itemId}?${params.toString()}`, {
     method: "PATCH",
     body: JSON.stringify(input),
   })
@@ -584,13 +793,6 @@ export function listGoogleCalendarEvents(startFrom?: Date, endTo?: Date) {
   const query = params.toString()
   return fetchJson<CalendarEvent[]>(
     query ? `/integrations/google-calendar/events?${query}` : "/integrations/google-calendar/events",
-  )
-}
-
-export function exportSavedPlanToGoogleCalendar(savedPlanId: number) {
-  return fetchJson<CalendarExportResult>(
-    `/integrations/google-calendar/export-plan/${savedPlanId}`,
-    { method: "POST" },
   )
 }
 
@@ -636,6 +838,100 @@ export function rejectExtractedCandidate(candidateId: number, reason?: string) {
   return fetchJson<ExtractedTaskCandidate>(`/integrations/gmail/candidates/${candidateId}/reject`, {
     method: "POST",
     body: JSON.stringify({ reason }),
+  })
+}
+
+export function listGroceryLists({ status }: ListGroceryListsOptions = {}) {
+  const params = new URLSearchParams()
+  if (status) params.set("status", status)
+  const query = params.toString()
+  return fetchJson<GroceryList[]>(query ? `/groceries/lists?${query}` : "/groceries/lists")
+}
+
+export function getGroceryList(listId: number) {
+  return fetchJson<GroceryList>(`/groceries/lists/${listId}`)
+}
+
+export function createGroceryList(input: GroceryListCreateInput) {
+  return fetchJson<GroceryList>("/groceries/lists", {
+    method: "POST",
+    body: JSON.stringify({ user_id: 1, ...input }),
+  })
+}
+
+export function updateGroceryList(listId: number, input: GroceryListUpdateInput) {
+  return fetchJson<GroceryList>(`/groceries/lists/${listId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteGroceryList(listId: number) {
+  return fetchVoid(`/groceries/lists/${listId}`, { method: "DELETE" })
+}
+
+export function addGroceryItem(listId: number, input: GroceryListItemCreateInput) {
+  return fetchJson<GroceryListItem>(`/groceries/lists/${listId}/items`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateGroceryItem(
+  listId: number,
+  itemId: number,
+  input: GroceryListItemUpdateInput,
+) {
+  return fetchJson<GroceryListItem>(`/groceries/lists/${listId}/items/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteGroceryItem(listId: number, itemId: number) {
+  return fetchVoid(`/groceries/lists/${listId}/items/${itemId}`, { method: "DELETE" })
+}
+
+export function suggestGroceryItems(listId: number, input: GrocerySuggestInput = {}) {
+  return fetchJson<GrocerySuggestResult>(`/groceries/lists/${listId}/suggest`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function getInstacartHandoff(listId: number) {
+  return fetchJson<InstacartHandoff>(`/groceries/lists/${listId}/handoff/instacart`)
+}
+
+export function syncInstacartReceipts() {
+  return fetchJson<InstacartReceiptSyncResult>("/groceries/orders/sync-instacart", {
+    method: "POST",
+    body: JSON.stringify({ user_id: 1 }),
+  })
+}
+
+export function listGroceryOrders() {
+  return fetchJson<GroceryOrder[]>("/groceries/orders")
+}
+
+export function getPantry(lookbackDays?: number) {
+  const params = new URLSearchParams()
+  if (lookbackDays != null) params.set("lookback_days", String(lookbackDays))
+  const query = params.toString()
+  return fetchJson<PantryRead>(query ? `/groceries/pantry?${query}` : "/groceries/pantry")
+}
+
+export function generateMealPlan(input: MealPlanRequestInput = {}) {
+  return fetchJson<MealPlanRead>("/groceries/meal-plan", {
+    method: "POST",
+    body: JSON.stringify({ user_id: 1, ...input }),
+  })
+}
+
+export function mealPlanToGroceryList(plan: MealPlanRead, title?: string) {
+  return fetchJson<MealPlanToGroceryListResult>("/groceries/meal-plan/to-grocery-list", {
+    method: "POST",
+    body: JSON.stringify({ user_id: 1, plan, title }),
   })
 }
 

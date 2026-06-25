@@ -24,10 +24,42 @@ export default {
         danger: "hsl(var(--danger))",
         "danger-foreground": "hsl(var(--danger-foreground))",
         ring: "hsl(var(--ring))",
+        sidebar: "hsl(var(--sidebar))",
+        "sidebar-foreground": "hsl(var(--sidebar-foreground))",
+        "sidebar-muted": "hsl(var(--sidebar-muted))",
+        "sidebar-border": "hsl(var(--sidebar-border))",
+      },
+      fontFamily: {
+        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        display: ["Fraunces", "Iowan Old Style", "Georgia", "Times New Roman", "serif"],
       },
       boxShadow: {
-        soft: "0 1px 3px rgba(0,0,0,0.04), 0 8px 20px rgba(0,0,0,0.06)",
-        card: "0 0 0 1px rgba(0,0,0,0.03), 0 2px 8px rgba(0,0,0,0.04)",
+        soft: "0 1px 3px hsl(30 30% 20% / 0.04), 0 8px 20px hsl(30 30% 20% / 0.05)",
+        card: "0 1px 2px hsl(30 30% 20% / 0.04), 0 10px 30px hsl(30 30% 20% / 0.05)",
+        "card-hover": "0 1px 2px hsl(30 30% 20% / 0.05), 0 6px 16px hsl(30 30% 20% / 0.08), 0 20px 44px hsl(30 30% 20% / 0.08)",
+        glow: "0 0 0 4px hsl(var(--primary) / 0.15)",
+      },
+      borderRadius: {
+        "2xl": "18px",
+        "3xl": "24px",
+      },
+      keyframes: {
+        fadeUp: {
+          from: { opacity: "0", transform: "translateY(8px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        slideIn: {
+          from: { opacity: "0", transform: "translateX(-8px)" },
+          to: { opacity: "1", transform: "translateX(0)" },
+        },
+        shimmer: {
+          "100%": { transform: "translateX(100%)" },
+        },
+      },
+      animation: {
+        "fade-up": "fadeUp 0.3s ease forwards",
+        "slide-in": "slideIn 0.2s ease forwards",
+        shimmer: "shimmer 1.5s infinite",
       },
     },
   },

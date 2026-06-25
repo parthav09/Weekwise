@@ -18,6 +18,7 @@ import {
   subscribeToWebPush,
   syncGmail,
   syncGoogleCalendar,
+  syncInstacartReceipts,
   unsubscribeFromWebPush,
   updateNotificationPreference,
   type CalendarStatus,
@@ -27,6 +28,7 @@ import {
   type ScheduledNotification,
   type WebPushSubscriptionRead,
 } from "../lib/api"
+import { showBrowserWarning, warnError } from "../lib/browserWarnings"
 import { applyTheme, getStoredTheme, type AppTheme } from "../lib/theme"
 import { cn } from "../lib/utils"
 
@@ -90,19 +92,17 @@ export function SettingsPage() {
   const [calendarLoading, setCalendarLoading] = useState(true)
   const [calendarSyncing, setCalendarSyncing] = useState(false)
   const [calendarMessage, setCalendarMessage] = useState<string | null>(null)
-  const [calendarError, setCalendarError] = useState<string | null>(null)
   const [gmailStatus, setGmailStatus] = useState<GmailStatus | null>(null)
   const [gmailLoading, setGmailLoading] = useState(true)
   const [gmailSyncing, setGmailSyncing] = useState(false)
+  const [receiptSyncing, setReceiptSyncing] = useState(false)
   const [gmailMessage, setGmailMessage] = useState<string | null>(null)
-  const [gmailError, setGmailError] = useState<string | null>(null)
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreference[]>([])
   const [webPushSubscriptions, setWebPushSubscriptions] = useState<WebPushSubscriptionRead[]>([])
   const [scheduledNotifications, setScheduledNotifications] = useState<ScheduledNotification[]>([])
   const [notificationsLoading, setNotificationsLoading] = useState(true)
   const [notificationsBusy, setNotificationsBusy] = useState(false)
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null)
-  const [notificationError, setNotificationError] = useState<string | null>(null)
 
   function setAppTheme(nextTheme: AppTheme) {
     setTheme(nextTheme)
@@ -115,25 +115,28 @@ export function SettingsPage() {
       setCalendarMessage("Google Calendar connected.")
     }
     if (result === "error") {
-      setCalendarError("Google Calendar connection failed.")
+      showBrowserWarning("Google Calendar connection failed.")
     }
     const gmailResult = searchParams.get("gmail")
+    const gmailDetail = searchParams.get("detail")
     if (gmailResult === "connected") {
       setGmailMessage("Gmail connected.")
+      void loadGmailStatus()
     }
     if (gmailResult === "error") {
-      setGmailError("Gmail connection failed.")
+      showBrowserWarning(
+        gmailDetail ? `Gmail connection failed: ${gmailDetail}` : "Gmail connection failed.",
+      )
     }
   }, [searchParams])
 
   useEffect(() => {
     async function loadStatus() {
       setCalendarLoading(true)
-      setCalendarError(null)
       try {
         setCalendarStatus(await getGoogleCalendarStatus())
       } catch (err) {
-        setCalendarError(err instanceof Error ? err.message : "Couldn't load calendar status")
+        warnError(err, "Couldn't load calendar status")
       } finally {
         setCalendarLoading(false)
       }
@@ -143,11 +146,10 @@ export function SettingsPage() {
 
   const loadGmailStatus = async () => {
     setGmailLoading(true)
-    setGmailError(null)
     try {
       setGmailStatus(await getGmailStatus())
     } catch (err) {
-      setGmailError(err instanceof Error ? err.message : "Couldn't load Gmail status")
+      warnError(err, "Couldn't load Gmail status")
     } finally {
       setGmailLoading(false)
     }
@@ -159,7 +161,6 @@ export function SettingsPage() {
 
   const loadNotifications = async () => {
     setNotificationsLoading(true)
-    setNotificationError(null)
     const now = new Date()
     const tomorrow = new Date(now)
     tomorrow.setHours(tomorrow.getHours() + 24)
@@ -173,7 +174,7 @@ export function SettingsPage() {
       setWebPushSubscriptions(subscriptions)
       setScheduledNotifications(scheduled)
     } catch (err) {
-      setNotificationError(err instanceof Error ? err.message : "Couldn't load notifications")
+      warnError(err, "Couldn't load notifications")
     } finally {
       setNotificationsLoading(false)
     }
@@ -185,7 +186,6 @@ export function SettingsPage() {
 
   async function handleSyncCalendar() {
     setCalendarSyncing(true)
-    setCalendarError(null)
     setCalendarMessage(null)
     const start = new Date()
     start.setDate(start.getDate() - 7)
@@ -195,7 +195,7 @@ export function SettingsPage() {
       const result = await syncGoogleCalendar(start, end)
       setCalendarMessage(`Synced ${result.synced_count} Google Calendar events.`)
     } catch (err) {
-      setCalendarError(err instanceof Error ? err.message : "Couldn't sync Google Calendar")
+      warnError(err, "Couldn't sync Google Calendar")
     } finally {
       setCalendarSyncing(false)
     }
@@ -203,7 +203,6 @@ export function SettingsPage() {
 
   async function handleSyncGmail() {
     setGmailSyncing(true)
-    setGmailError(null)
     setGmailMessage(null)
     try {
       const result = await syncGmail()
@@ -212,9 +211,25 @@ export function SettingsPage() {
       )
       await loadGmailStatus()
     } catch (err) {
-      setGmailError(err instanceof Error ? err.message : "Couldn't sync Gmail")
+      warnError(err, "Couldn't sync Gmail")
     } finally {
       setGmailSyncing(false)
+    }
+  }
+
+  async function handleSyncInstacartReceipts() {
+    setReceiptSyncing(true)
+    setGmailMessage(null)
+    try {
+      const result = await syncInstacartReceipts()
+      setGmailMessage(
+        `Imported ${result.new_order_count} Instacart order${result.new_order_count === 1 ? "" : "s"} (${result.new_item_count} items).`,
+      )
+      await loadGmailStatus()
+    } catch (err) {
+      warnError(err, "Couldn't sync Instacart receipts")
+    } finally {
+      setReceiptSyncing(false)
     }
   }
 
@@ -223,14 +238,13 @@ export function SettingsPage() {
       return
     }
     setGmailSyncing(true)
-    setGmailError(null)
     setGmailMessage(null)
     try {
       await disconnectGmail()
       setGmailStatus({ connected: false, provider_account_email: null, token_expires_at: null, last_synced_at: null })
       setGmailMessage("Gmail disconnected.")
     } catch (err) {
-      setGmailError(err instanceof Error ? err.message : "Couldn't disconnect Gmail")
+      warnError(err, "Couldn't disconnect Gmail")
     } finally {
       setGmailSyncing(false)
     }
@@ -241,7 +255,6 @@ export function SettingsPage() {
     input: { enabled?: boolean; default_lead_minutes?: number },
   ) {
     setNotificationsBusy(true)
-    setNotificationError(null)
     setNotificationMessage(null)
     try {
       const updated = await updateNotificationPreference(preference.channel, input)
@@ -249,7 +262,7 @@ export function SettingsPage() {
         prev.map((pref) => (pref.channel === updated.channel ? updated : pref)),
       )
     } catch (err) {
-      setNotificationError(err instanceof Error ? err.message : "Couldn't update preference")
+      warnError(err, "Couldn't update preference")
     } finally {
       setNotificationsBusy(false)
     }
@@ -257,7 +270,6 @@ export function SettingsPage() {
 
   async function handleEnableBrowserNotifications() {
     setNotificationsBusy(true)
-    setNotificationError(null)
     setNotificationMessage(null)
     try {
       if (!("Notification" in window) || !("PushManager" in window) || !("serviceWorker" in navigator)) {
@@ -284,7 +296,7 @@ export function SettingsPage() {
       setNotificationMessage("Browser notifications enabled.")
       await loadNotifications()
     } catch (err) {
-      setNotificationError(err instanceof Error ? err.message : "Couldn't enable browser notifications")
+      warnError(err, "Couldn't enable browser notifications")
     } finally {
       setNotificationsBusy(false)
     }
@@ -292,14 +304,13 @@ export function SettingsPage() {
 
   async function handleRemoveWebPushSubscription(subscriptionId: number) {
     setNotificationsBusy(true)
-    setNotificationError(null)
     setNotificationMessage(null)
     try {
       await unsubscribeFromWebPush(subscriptionId)
       setWebPushSubscriptions((prev) => prev.filter((sub) => sub.id !== subscriptionId))
       setNotificationMessage("Browser notification subscription removed.")
     } catch (err) {
-      setNotificationError(err instanceof Error ? err.message : "Couldn't remove subscription")
+      warnError(err, "Couldn't remove subscription")
     } finally {
       setNotificationsBusy(false)
     }
@@ -307,7 +318,6 @@ export function SettingsPage() {
 
   async function handleRunDispatch() {
     setNotificationsBusy(true)
-    setNotificationError(null)
     setNotificationMessage(null)
     try {
       const result = await runDispatchNotifications()
@@ -316,7 +326,7 @@ export function SettingsPage() {
       )
       await loadNotifications()
     } catch (err) {
-      setNotificationError(err instanceof Error ? err.message : "Couldn't run dispatch")
+      warnError(err, "Couldn't run dispatch")
     } finally {
       setNotificationsBusy(false)
     }
@@ -331,7 +341,7 @@ export function SettingsPage() {
         </p>
       </div>
 
-      <div className="rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
+      <div className="fluid-card p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -369,7 +379,7 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
+      <div className="fluid-card p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -413,14 +423,9 @@ export function SettingsPage() {
             {calendarMessage}
           </p>
         ) : null}
-        {calendarError ? (
-          <p className="mt-3 rounded-lg border border-danger/25 bg-danger/10 px-3 py-2 text-xs text-danger">
-            {calendarError}
-          </p>
-        ) : null}
       </div>
 
-      <div className="rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
+      <div className="fluid-card p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -466,7 +471,17 @@ export function SettingsPage() {
               type="button"
               variant="outline"
               size="sm"
-              disabled={!gmailStatus?.connected || gmailSyncing}
+              disabled={!gmailStatus?.connected || gmailSyncing || receiptSyncing}
+              onClick={handleSyncInstacartReceipts}
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", receiptSyncing && "animate-spin")} />
+              {receiptSyncing ? "Syncing receipts..." : "Sync Instacart receipts"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!gmailStatus?.connected || gmailSyncing || receiptSyncing}
               onClick={handleDisconnectGmail}
             >
               Disconnect
@@ -474,21 +489,17 @@ export function SettingsPage() {
           </div>
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          WeekWise stores Gmail metadata and snippets only. Full email bodies and attachments are not fetched.
+          Task extraction uses Gmail metadata and snippets. Instacart receipt sync reads full receipt
+          email bodies from your connected Gmail account to build pantry and meal planning data.
         </p>
         {gmailMessage ? (
           <p className="mt-3 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-xs text-success">
             {gmailMessage}
           </p>
         ) : null}
-        {gmailError ? (
-          <p className="mt-3 rounded-lg border border-danger/25 bg-danger/10 px-3 py-2 text-xs text-danger">
-            {gmailError}
-          </p>
-        ) : null}
       </div>
 
-      <div className="rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
+      <div className="fluid-card p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -497,7 +508,7 @@ export function SettingsPage() {
             <div>
               <h3 className="font-semibold">Notifications</h3>
               <p className="text-xs text-muted-foreground">
-                Reminders are scheduled from saved plan items. Run dispatch manually here until cron is configured.
+                Manage browser, email, and in-app reminders. Run dispatch manually here until cron is configured.
               </p>
             </div>
           </div>
@@ -638,11 +649,6 @@ export function SettingsPage() {
             {notificationMessage}
           </p>
         ) : null}
-        {notificationError ? (
-          <p className="mt-3 rounded-lg border border-danger/25 bg-danger/10 px-3 py-2 text-xs text-danger">
-            {notificationError}
-          </p>
-        ) : null}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -653,7 +659,7 @@ export function SettingsPage() {
             <div
               key={group.title}
               className={cn(
-                "rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm",
+                "fluid-card p-5",
                 group.comingSoon && "opacity-75",
               )}
             >

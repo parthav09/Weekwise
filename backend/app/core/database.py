@@ -11,7 +11,12 @@ class Base(DeclarativeBase):
 
 
 engine = create_engine(settings.sqlalchemy_database_uri, pool_pre_ping=True)
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+SessionLocal = sessionmaker(
+    bind=engine,
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False,
+)
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -20,4 +25,3 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
-

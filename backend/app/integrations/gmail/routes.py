@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, time, timezone
 from urllib.parse import urlencode
 
@@ -33,6 +34,7 @@ from app.services.email_extractor import sync_gmail_for_user
 from app.services.tasks import create_task_record
 
 router = APIRouter(prefix="/integrations/gmail", tags=["integrations: gmail"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/status", response_model=GmailStatusRead)
@@ -74,7 +76,8 @@ def gmail_callback(
     try:
         exchange_code_for_account(db, code=code, user_id=user_id)
     except (GmailError, HTTPException) as exc:
-        detail = exc.detail if isinstance(exc, HTTPException) else "oauth_failed"
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        logger.warning("Gmail OAuth callback failed for user %s: %s", user_id, exc)
         return _frontend_redirect("settings", gmail="error", detail=str(detail))
 
     return _frontend_redirect("settings", gmail="connected")
@@ -180,7 +183,7 @@ def _task_payload_from_candidate(
 ) -> TaskCreate:
     due_date = None
     if candidate.suggested_due_date is not None:
-        due_date = datetime.combine(candidate.suggested_due_date, time.min, tzinfo=timezone.utc)
+        due_date = datetime.combine(candidate.suggested_due_date, time(12), tzinfo=timezone.utc)
 
     data = {
         "user_id": user_id,

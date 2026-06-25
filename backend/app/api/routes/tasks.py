@@ -1,7 +1,7 @@
 from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -21,16 +21,25 @@ def create_task(payload: TaskCreate, db: Session = Depends(get_db)) -> Task:
 def list_tasks(
     due_from: date | None = None,
     due_to: date | None = None,
+    include_unscheduled: bool = False,
     db: Session = Depends(get_db),
 ) -> list[Task]:
     query = select(Task)
+    filters = []
     if due_from is not None:
-        query = query.where(
+        filters.append(
             Task.due_date >= datetime.combine(due_from, time.min, tzinfo=timezone.utc)
         )
     if due_to is not None:
-        query = query.where(
+        filters.append(
             Task.due_date <= datetime.combine(due_to, time.max, tzinfo=timezone.utc)
+        )
+    if filters:
+        dated_filter = filters[0] if len(filters) == 1 else and_(*filters)
+        query = query.where(
+            or_(Task.due_date.is_(None), dated_filter)
+            if include_unscheduled
+            else dated_filter
         )
 
     if due_from is not None or due_to is not None:

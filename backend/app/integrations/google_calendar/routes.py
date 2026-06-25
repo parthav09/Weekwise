@@ -8,14 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.integrations.google_calendar.client import (
     GoogleCalendarError,
     build_auth_url,
-    create_event,
     exchange_code_for_account,
     get_account,
     list_events,
@@ -23,7 +22,6 @@ from app.integrations.google_calendar.client import (
     require_account,
 )
 from app.models.calendar import CalendarEventCache
-from app.models.generated_plan import GeneratedPlan, GeneratedPlanDay, GeneratedPlanItem
 from app.services.dev_user import ensure_dev_user
 
 router = APIRouter(
@@ -70,12 +68,6 @@ class CalendarEventRead(BaseModel):
     is_all_day: bool
     raw_payload: dict[str, Any] = Field(default_factory=dict)
     synced_at: datetime
-
-
-class CalendarExportRead(BaseModel):
-    exported_count: int
-    skipped_count: int
-    event_ids: list[str]
 
 
 @router.get("/status", response_model=CalendarStatusRead)
@@ -201,80 +193,8 @@ def list_cached_google_calendar_events(
     return list(db.scalars(query.order_by(CalendarEventCache.start_at.asc())).all())
 
 
-@router.post("/export-plan/{saved_plan_id}", response_model=CalendarExportRead)
-def export_saved_plan_to_google_calendar(
-    saved_plan_id: int,
-    user_id: int = 1,
-    calendar_id: str = "primary",
-    db: Session = Depends(get_db),
-) -> CalendarExportRead:
-    ensure_dev_user(db, user_id)
-    account = require_account(db, user_id=user_id)
-    plan = db.scalar(
-        select(GeneratedPlan)
-        .options(selectinload(GeneratedPlan.days).selectinload(GeneratedPlanDay.items))
-        .where(GeneratedPlan.id == saved_plan_id)
-        .where(GeneratedPlan.user_id == user_id)
-    )
-    if plan is None:
-        raise HTTPException(status_code=404, detail="Saved plan not found")
-
-    event_ids: list[str] = []
-    exported_count = 0
-    skipped_count = 0
-    for item in _exportable_items(plan):
-        metadata = dict(item.item_metadata or {})
-        existing_event_id = metadata.get("google_calendar_event_id")
-        if existing_event_id:
-            skipped_count += 1
-            event_ids.append(str(existing_event_id))
-            continue
-
-        start_at = item.moved_to_start if item.moved_to_start else item.start_at
-        end_at = item.moved_to_end if item.moved_to_end else item.end_at
-        try:
-            event_id = create_event(
-                db,
-                account,
-                calendar_id=calendar_id,
-                title=item.title,
-                start_at=start_at,
-                end_at=end_at,
-                metadata={
-                    "weekwise_saved_plan_id": str(plan.id),
-                    "weekwise_saved_plan_item_id": str(item.id),
-                    "weekwise_item_type": item.item_type,
-                },
-            )
-        except GoogleCalendarError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-        metadata["google_calendar_event_id"] = event_id
-        metadata["google_calendar_id"] = calendar_id
-        item.item_metadata = metadata
-        db.add(item)
-        event_ids.append(event_id)
-        exported_count += 1
-
-    db.commit()
-    return CalendarExportRead(
-        exported_count=exported_count,
-        skipped_count=skipped_count,
-        event_ids=event_ids,
-    )
-
-
 def require_optional_account(db: Session, *, user_id: int):
     return get_account(db, user_id=user_id)
-
-
-def _exportable_items(plan: GeneratedPlan) -> list[GeneratedPlanItem]:
-    items: list[GeneratedPlanItem] = []
-    for day in plan.days:
-        for item in day.items:
-            if item.item_type in {"task", "habit"}:
-                items.append(item)
-    return sorted(items, key=lambda item: item.start_at)
 
 
 def _frontend_redirect(path: str, **query: str) -> RedirectResponse:

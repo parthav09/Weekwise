@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+from html import unescape
 from typing import Any
 from urllib import parse, request
 from urllib.error import HTTPError, URLError
@@ -132,6 +135,56 @@ def get_message_metadata(token: str, message_id: str) -> dict[str, Any]:
     return _get_json(url, token)
 
 
+def list_message_ids(
+    token: str,
+    *,
+    query: str,
+    max_results: int,
+) -> list[str]:
+    capped_max = max(1, min(max_results, 100))
+    params = {
+        "q": query,
+        "maxResults": str(capped_max),
+    }
+    url = f"{GMAIL_API}/users/me/messages?{parse.urlencode(params)}"
+    data = _get_json(url, token)
+    summaries = data.get("messages") or []
+    ids: list[str] = []
+    for summary in summaries[:capped_max]:
+        message_id = summary.get("id")
+        if message_id:
+            ids.append(str(message_id))
+    return ids
+
+
+def get_message_full(token: str, message_id: str) -> dict[str, Any]:
+    params = [("format", "full")]
+    url = f"{GMAIL_API}/users/me/messages/{parse.quote(message_id, safe='')}?{parse.urlencode(params)}"
+    return _get_json(url, token)
+
+
+def extract_plain_text(payload: dict[str, Any] | None, *, max_len: int = 50_000) -> str:
+    if not payload:
+        return ""
+    plain_parts: list[str] = []
+    html_parts: list[str] = []
+    _collect_mime_parts(payload, plain_parts, html_parts)
+    text = "\n".join(part.strip() for part in plain_parts if part.strip())
+    if html_parts:
+        html_text = _html_to_text("\n".join(html_parts))
+        lowered_plain = text.lower()
+        lowered_html = html_text.lower()
+        if not text:
+            text = html_text
+        elif (
+            "view all items and full receipt" in lowered_plain
+            or "final item price" in lowered_html
+            or "items found" in lowered_html
+        ):
+            text = f"{text}\n\n{html_text}"
+    return _truncate(text, max_len) or ""
+
+
 def parse_message(raw: dict[str, Any]) -> dict[str, Any]:
     headers = {
         str(header.get("name", "")).lower(): str(header.get("value", ""))
@@ -232,6 +285,45 @@ def _truncate(value: Any, max_len: int) -> str | None:
     if value is None:
         return None
     return str(value)[:max_len]
+
+
+def _collect_mime_parts(
+    part: dict[str, Any],
+    plain_parts: list[str],
+    html_parts: list[str],
+) -> None:
+    mime_type = str(part.get("mimeType") or "")
+    body = part.get("body") or {}
+    data = body.get("data")
+    if data and mime_type.startswith("text/plain"):
+        plain_parts.append(_decode_base64url(str(data)))
+    elif data and mime_type.startswith("text/html"):
+        html_parts.append(_decode_base64url(str(data)))
+
+    for child in part.get("parts") or []:
+        if isinstance(child, dict):
+            _collect_mime_parts(child, plain_parts, html_parts)
+
+
+def _decode_base64url(value: str) -> str:
+    padded = value + "=" * (-len(value) % 4)
+    try:
+        raw = base64.urlsafe_b64decode(padded.encode("ascii"))
+    except (ValueError, UnicodeEncodeError):
+        return ""
+    return raw.decode("utf-8", errors="replace")
+
+
+def _html_to_text(value: str) -> str:
+    text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", value)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</p\s*>", "\n", text)
+    text = re.sub(r"(?is)<[^>]+>", " ", text)
+    text = unescape(text)
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    return text.strip()
 
 
 def _post_form(url: str, form: dict[str, Any]) -> dict[str, Any]:
