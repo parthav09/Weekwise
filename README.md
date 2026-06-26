@@ -1,8 +1,42 @@
 # WeekWise
 
-WeekWise is an AI-assisted weekly planning app with a React/Vite frontend, FastAPI backend, SQLAlchemy models, Alembic migrations, and a Supabase-hosted PostgreSQL database.
+WeekWise is a personal planning app for turning tasks, habits, protected life time,
+calendar events, and email follow-ups into realistic daily and weekly plans.
 
-This project does not include authentication, AI planning, API gateways, background workers, external integrations, or deployment automation yet.
+The project is built as a React/Vite frontend backed by a FastAPI API, SQLAlchemy
+models, Alembic migrations, and PostgreSQL. It can run locally as separate
+frontend/backend processes, or FastAPI can serve the compiled frontend from
+`frontend/dist`.
+
+## What The App Does
+
+WeekWise is meant to answer a practical planning question: "What should my week
+look like if I account for the work I owe, the habits I want to maintain, the
+time I cannot use, and the messages that require follow-up?"
+
+Current product areas:
+
+- Dashboard: weekly progress, quick task entry, open task preview, habit progress,
+  and pending Gmail task candidate count.
+- Tasks: create, update, complete, move, filter, and delete tasks with priority,
+  energy, category, estimated time, and schedule flexibility metadata.
+- Habits: define weekly targets and log completions.
+- Life Blocks: protect fixed or recurring time for sleep, workouts, classes,
+  work, meals, commute, recovery, focus, and other recurring commitments.
+- Planning: generate day or week plans from tasks, habits, life blocks, and
+  external busy blocks.
+- Saved Plans: persist generated plans, update saved plan item status, move plan
+  items, and retain feedback reasons.
+- Google Calendar: connect via OAuth, sync busy events into planning context, and
+  export saved task/habit plan items back to Google Calendar.
+- Gmail Inbox: connect Gmail, sync recent messages, extract task candidates with
+  Gemini, then accept or reject candidates before they become real tasks.
+- Notifications: manage in-app, email, and web-push preferences, create scheduled
+  reminders for saved plan items, and dispatch due notifications through an API
+  endpoint.
+
+Authentication is not implemented yet. Local development uses a dev user and most
+API requests default to `user_id=1`.
 
 ## Architecture
 
@@ -11,7 +45,7 @@ Browser
   |
   | http://localhost:5173
   v
-React + Vite frontend
+React + Vite + TypeScript frontend
   |
   | VITE_API_BASE_URL=http://localhost:8000/api
   v
@@ -19,16 +53,29 @@ FastAPI backend
   |
   | SQLAlchemy + psycopg
   v
-Supabase PostgreSQL
+PostgreSQL, commonly Supabase Postgres for local/project hosting
 ```
 
-Local development runs the frontend and backend directly on your machine. The database is Supabase Postgres, configured through one backend environment variable:
+Optional external services:
 
-```env
-DATABASE_URL=postgresql://postgres:your-password@db.your-project-ref.supabase.co:5432/postgres?sslmode=require
+```text
+Gemini API       -> AI plan generation and Gmail task extraction
+Google OAuth     -> Google Calendar and Gmail integrations
+SMTP             -> Email notification dispatch
+Web Push VAPID   -> Browser push notifications
 ```
 
-The backend accepts standard Supabase/Postgres URLs that start with `postgresql://` or `postgres://` and automatically routes them through the installed SQLAlchemy `psycopg` driver.
+If `GEMINI_API_KEY` is not configured, plan generation falls back to the
+rule-based planner. Gmail task extraction requires Gemini to produce candidates.
+
+## Tech Stack
+
+```text
+Frontend: React 18, TypeScript, Vite, Tailwind CSS, react-router-dom, lucide-react
+Backend:  FastAPI, SQLAlchemy 2, Pydantic Settings, Alembic, psycopg
+AI:       Google Gemini through google-genai
+Database: PostgreSQL
+```
 
 ## Requirements
 
@@ -36,30 +83,67 @@ The backend accepts standard Supabase/Postgres URLs that start with `postgresql:
 Python 3.11
 Node.js 20
 npm
-Supabase project with a Postgres connection string
+PostgreSQL connection string
 ```
 
-Runtime version files:
+Supabase Postgres works well for local development because the backend accepts
+standard URLs that start with `postgresql://` or `postgres://` and rewrites them
+for SQLAlchemy's installed `psycopg` driver.
 
-```text
-backend/.python-version -> 3.11
-frontend/.nvmrc         -> 20
+Example:
+
+```env
+DATABASE_URL=postgresql://postgres:your-password@db.your-project-ref.supabase.co:5432/postgres?sslmode=require
 ```
 
 ## Setup
 
-### 1. Configure Supabase
-
-Create a Supabase project, copy its Postgres connection string, and put it in `backend/.env`:
+### 1. Configure Backend
 
 ```bash
 cd backend
 cp .env.example .env
 ```
 
-Then replace the placeholder `DATABASE_URL` value with your Supabase Postgres URL.
+Edit `backend/.env` and set at least:
 
-### 2. Start Backend For Local Development
+```env
+DATABASE_URL=postgresql://postgres:your-password@db.your-project-ref.supabase.co:5432/postgres?sslmode=require
+BACKEND_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+```
+
+Optional backend values:
+
+```env
+GEMINI_API_KEY=
+AI_PLANNER_MODEL=gemini-2.5-flash
+
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/integrations/google-calendar/callback
+GOOGLE_CALENDAR_SCOPES=openid email https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events
+
+GMAIL_REDIRECT_URI=http://localhost:8000/api/integrations/gmail/callback
+GMAIL_SCOPES=openid email https://www.googleapis.com/auth/gmail.readonly
+GMAIL_SYNC_LOOKBACK_DAYS=7
+GMAIL_SYNC_MAX_MESSAGES=50
+EMAIL_EXTRACTOR_MODEL=
+
+FRONTEND_APP_URL=http://localhost:5173
+
+NOTIFICATIONS_ENABLED=false
+NOTIFICATION_DEFAULT_LEAD_MINUTES=10
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_FROM_EMAIL=
+WEB_PUSH_VAPID_PUBLIC_KEY=
+WEB_PUSH_VAPID_PRIVATE_KEY=
+WEB_PUSH_CONTACT_EMAIL=
+```
+
+### 2. Run Backend
 
 From `backend/`:
 
@@ -77,13 +161,13 @@ Health check:
 curl http://localhost:8000/health
 ```
 
-Expected:
+Expected response:
 
 ```json
 {"status":"ok","service":"weekwise-backend"}
 ```
 
-### 3. Start Frontend
+### 3. Run Frontend
 
 From `frontend/`:
 
@@ -99,10 +183,15 @@ Open:
 http://localhost:5173
 ```
 
-### 4. Build Frontend Into Backend Hosting Mode
+The default frontend API setting is:
 
-For a single-process setup where FastAPI serves the compiled React app, build the
-frontend first:
+```env
+VITE_API_BASE_URL=http://localhost:8000/api
+```
+
+### 4. Serve Built Frontend From FastAPI
+
+For a single-process local run, build the frontend first:
 
 ```bash
 cd frontend
@@ -124,48 +213,9 @@ Open:
 http://localhost:8000
 ```
 
-FastAPI serves `frontend/dist` when it exists. React routes such as `/tasks`,
-`/habits`, `/weekly-plan`, and `/settings` are handled by the frontend, while API
-routes are available under `/api`.
-
-## Environment Variables
-
-Backend local environment values live in:
-
-```text
-backend/.env
-```
-
-Template:
-
-```text
-backend/.env.example
-```
-
-Backend variables:
-
-```env
-DATABASE_URL=postgresql://postgres:your-password@db.your-project-ref.supabase.co:5432/postgres?sslmode=require
-BACKEND_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-```
-
-Frontend local environment values can live in:
-
-```text
-frontend/.env
-```
-
-Template:
-
-```text
-frontend/.env.example
-```
-
-Frontend variables:
-
-```env
-VITE_API_BASE_URL=http://localhost:8000/api
-```
+When `frontend/dist` exists, FastAPI serves static assets and lets React handle
+routes such as `/today`, `/tasks`, `/inbox`, `/habits`, `/life-blocks`,
+`/weekly-plan`, and `/settings`. API routes remain under `/api`.
 
 ## Migrations
 
@@ -196,21 +246,18 @@ WeekWise/
   frontend/
     src/
       components/
-        ui/
       pages/
       lib/
     package.json
-    tailwind.config.ts
     vite.config.ts
+    tailwind.config.ts
 
   backend/
     app/
       main.py
-      api/
-        routes/
+      api/routes/
       core/
-        config.py
-        database.py
+      integrations/
       models/
       schemas/
       services/
@@ -218,157 +265,152 @@ WeekWise/
     requirements.txt
 
   README.md
-  .gitignore
 ```
 
-## Current API
+## Current API Surface
+
+Core:
 
 ```text
-GET  /health
-GET  /api/health
-POST /api/tasks
-GET  /api/tasks?due_from=YYYY-MM-DD&due_to=YYYY-MM-DD
-GET  /api/tasks/{task_id}
-PATCH /api/tasks/{task_id}
-DELETE /api/tasks/{task_id}
-POST /api/habits
-GET  /api/habits
-GET  /api/habits/{habit_id}
-PATCH /api/habits/{habit_id}
-DELETE /api/habits/{habit_id}
-GET  /api/habits/completions
-POST /api/habits/{habit_id}/completions
-POST /api/availability-blocks
-GET  /api/availability-blocks
-GET  /api/availability-blocks/{availability_block_id}
-POST /api/plans/week
-POST /api/plans/day
-POST /api/plans/save
-POST /api/plans/week/save
-POST /api/plans/day/save
-GET  /api/plans/saved
-GET  /api/plans/saved/{plan_id}
-PATCH /api/plans/items/{item_id}
+GET    /health
+GET    /api/health
 ```
 
-Authentication is not implemented yet. Create requests accept `user_id`, defaulting to `1`, for local development only.
+Tasks:
 
-## Current Data Models
+```text
+POST   /api/tasks
+GET    /api/tasks?due_from=YYYY-MM-DD&due_to=YYYY-MM-DD
+GET    /api/tasks/{task_id}
+PATCH  /api/tasks/{task_id}
+DELETE /api/tasks/{task_id}
+```
+
+Habits:
+
+```text
+POST   /api/habits
+GET    /api/habits
+GET    /api/habits/completions
+GET    /api/habits/{habit_id}
+PATCH  /api/habits/{habit_id}
+DELETE /api/habits/{habit_id}
+POST   /api/habits/{habit_id}/completions
+```
+
+Life blocks:
+
+```text
+POST   /api/availability-blocks
+GET    /api/availability-blocks?start_from=ISO&end_to=ISO
+GET    /api/availability-blocks/{availability_block_id}
+PATCH  /api/availability-blocks/{availability_block_id}
+DELETE /api/availability-blocks/{availability_block_id}
+```
+
+Plans:
+
+```text
+POST   /api/plans/week
+POST   /api/plans/day
+POST   /api/plans/save
+POST   /api/plans/week/save
+POST   /api/plans/day/save
+GET    /api/plans/saved
+GET    /api/plans/saved/{plan_id}
+PATCH  /api/plans/items/{item_id}
+```
+
+Google Calendar:
+
+```text
+GET    /api/integrations/google-calendar/status
+GET    /api/integrations/google-calendar/connect
+GET    /api/integrations/google-calendar/callback
+POST   /api/integrations/google-calendar/sync
+GET    /api/integrations/google-calendar/events
+POST   /api/integrations/google-calendar/export-plan/{saved_plan_id}
+```
+
+Gmail:
+
+```text
+GET    /api/integrations/gmail/status
+GET    /api/integrations/gmail/connect
+GET    /api/integrations/gmail/callback
+POST   /api/integrations/gmail/sync
+DELETE /api/integrations/gmail/disconnect
+GET    /api/integrations/gmail/candidates
+POST   /api/integrations/gmail/candidates/{candidate_id}/accept
+POST   /api/integrations/gmail/candidates/{candidate_id}/reject
+```
+
+Notifications:
+
+```text
+GET    /api/notifications/preferences
+PATCH  /api/notifications/preferences/{channel}
+GET    /api/notifications/web-push/public-key
+GET    /api/notifications/web-push/subscriptions
+POST   /api/notifications/web-push/subscribe
+DELETE /api/notifications/web-push/{subscription_id}
+GET    /api/notifications/scheduled
+POST   /api/notifications/run-dispatch
+```
+
+## Current Data Model Areas
 
 ```text
 User
-- id
-- name
-- email
-- created_at
-- updated_at
-
 Task
-- id
-- user_id
-- title
-- description (optional notes)
-- priority: low | medium | high | urgent
-- status: todo | in_progress | done
-- due_date (deadline / planned day)
-- estimated_minutes
-- energy_level: low | medium | high
-- category: school | work | fitness | social | errands | personal
-- schedule_flexibility: flexible | fixed
-- completed_at
-- created_at
-- updated_at
-
 Habit
-- id
-- user_id
-- title
-- target_count_per_week: minimum 4
-- estimated_minutes
-- preferred_time_of_day
-- created_at
-- updated_at
-
 HabitCompletion
-- id
-- habit_id
-- user_id
-- note
-- completed_on: unique per habit
-- completed_at
-- created_at
-
-AvailabilityBlock
-- id
-- user_id
-- title
-- block_type: available | blocked | recovery
-- start_time
-- end_time
-- recurrence_rule
-- created_at
-- updated_at
-
+AvailabilityBlock / LifeBlock
 GeneratedPlan
-- id
-- user_id
-- scope: day | week
-- generator: rules | ai
-- start_at
-- end_at
-- notes
-- plan_payload
-- created_at
-- updated_at
-
+GeneratedPlanDay
 GeneratedPlanItem
-- id
-- generated_plan_id
-- generated_plan_day_id
-- title
-- item_type: task | habit | life
-- source_id
-- start_at
-- end_at
-- status: planned | done | skipped | moved | failed
-- feedback_reason
-- moved_to_start
-- moved_to_end
-- metadata
-- created_at
-- updated_at
+Google account and cached calendar events
+External busy windows derived from cached calendar events
+Email messages and extracted task candidates
+Notification preferences, scheduled notifications, and web-push subscriptions
 ```
+
+The app is still local-development oriented. Because authentication is not wired
+in, user-scoped features use the dev user pattern instead of real account
+ownership.
 
 ## Deployment Direction
 
-A realistic production setup for this app would be:
+A realistic production setup would be:
 
 ```text
 weekwise.com        -> hosted frontend
 api.weekwise.com    -> hosted FastAPI backend
-PostgreSQL          -> Supabase
-Cloudflare          -> DNS
+PostgreSQL          -> managed Postgres, such as Supabase
+Cloudflare          -> DNS and edge routing
+Background worker   -> notification dispatch and scheduled sync jobs
 ```
 
-The frontend should use:
+Frontend production environment:
 
 ```env
 VITE_API_BASE_URL=https://api.weekwise.com/api
 ```
 
-The backend should use production database credentials and CORS origins:
+Backend production environment:
 
 ```env
 DATABASE_URL=postgresql://...
 BACKEND_CORS_ORIGINS=https://weekwise.com,https://www.weekwise.com
+FRONTEND_APP_URL=https://weekwise.com
 ```
 
 ## Recommended Next Product Steps
 
 ```text
-1. Use saved-plan feedback to improve future planning suggestions.
-2. Add authentication.
-3. Scope all data to authenticated users.
-4. Add planner analytics once enough feedback exists.
-5. Add external integrations after the core loop is reliable.
+1. Add authentication and replace the dev user flow with real user ownership.
+2. Move notification dispatch and external sync into background jobs.
+3. Add automated tests around planning, integrations, and saved-plan feedback.
+4. Improve planner feedback loops so skipped, moved, and failed items influence future plans.
+5. Harden OAuth, secrets, CORS, and deployment configuration for production.
 ```
