@@ -183,6 +183,8 @@ Open:
 http://localhost:5173
 ```
 
+Keep the backend running in a separate terminal while using the Vite dev server.
+
 The default frontend API setting is:
 
 ```env
