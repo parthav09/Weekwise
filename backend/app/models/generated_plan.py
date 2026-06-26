@@ -2,7 +2,7 @@ import enum
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Index, Integer, JSON, String, Text, func
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -29,15 +29,6 @@ class GeneratedPlanItemStatus(str, enum.Enum):
 
 class GeneratedPlan(Base):
     __tablename__ = "generated_plans"
-    __table_args__ = (
-        Index(
-            "ix_generated_plans_user_scope_window",
-            "user_id",
-            "scope",
-            "start_at",
-            "end_at",
-        ),
-    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
@@ -71,9 +62,6 @@ class GeneratedPlan(Base):
 
 class GeneratedPlanDay(Base):
     __tablename__ = "generated_plan_days"
-    __table_args__ = (
-        Index("ix_generated_plan_days_plan_date", "generated_plan_id", "date"),
-    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     generated_plan_id: Mapped[int] = mapped_column(
@@ -95,9 +83,6 @@ class GeneratedPlanDay(Base):
 
 class GeneratedPlanItem(Base):
     __tablename__ = "generated_plan_items"
-    __table_args__ = (
-        Index("ix_generated_plan_items_day_start", "generated_plan_day_id", "start_at"),
-    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     generated_plan_id: Mapped[int] = mapped_column(

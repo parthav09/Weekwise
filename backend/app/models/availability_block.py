@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -28,9 +28,6 @@ class LifeBlockCategory(str, enum.Enum):
 
 class AvailabilityBlock(Base):
     __tablename__ = "availability_blocks"
-    __table_args__ = (
-        Index("ix_availability_blocks_user_start_end", "user_id", "start_time", "end_time"),
-    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
@@ -53,3 +50,4 @@ class AvailabilityBlock(Base):
     )
 
     user = relationship("User", back_populates="availability_blocks")
+

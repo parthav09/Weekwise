@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.integrations.notifications import email, inapp, web_push
-from app.models.generated_plan import GeneratedPlanItem
+from app.models.generated_plan import GeneratedPlan, GeneratedPlanItem
 from app.models.notification import (
     NotificationChannel,
     NotificationPreference,
@@ -69,6 +69,20 @@ def update_preference(
     db.commit()
     db.refresh(preference)
     return preference
+
+
+def schedule_notifications_for_saved_plan(
+    db: Session,
+    plan: GeneratedPlan,
+    lead_minutes: int | None = None,
+) -> list[ScheduledNotification]:
+    preferences = [pref for pref in _ensure_preferences(db, plan.user_id) if pref.enabled]
+    created: list[ScheduledNotification] = []
+    now = _now()
+    for item in plan.items:
+        created.extend(_schedule_notifications_for_item(db, item, preferences, now, lead_minutes))
+    db.commit()
+    return created
 
 
 def cancel_notifications_for_item(db: Session, item_id: int) -> int:

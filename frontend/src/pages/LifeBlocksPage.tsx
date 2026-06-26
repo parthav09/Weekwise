@@ -10,7 +10,6 @@ import {
   updateLifeBlock,
 } from "../lib/api"
 import type { LifeBlock, LifeBlockCategory, LifeBlockType } from "../lib/api"
-import { warnError } from "../lib/browserWarnings"
 import { formatDateTime } from "../lib/dates"
 import { lifeBlockCategoryConfig } from "../lib/lifeBlockCategories"
 import { cn } from "../lib/utils"
@@ -127,16 +126,18 @@ function describeRecurrence(rule: string | null) {
 export function LifeBlocksPage() {
   const [blocks, setBlocks] = useState<LifeBlock[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [createForm, setCreateForm] = useState<FormValues>(emptyForm)
   const [submitting, setSubmitting] = useState(false)
 
   const loadBlocks = useCallback(async () => {
     setIsLoading(true)
+    setError(null)
     try {
       setBlocks(await listLifeBlocks())
     } catch (err) {
-      warnError(err, "Couldn't load life blocks")
+      setError(err instanceof Error ? err.message : "Couldn't load life blocks")
     } finally {
       setIsLoading(false)
     }
@@ -150,6 +151,7 @@ export function LifeBlocksPage() {
     e.preventDefault()
     if (!createForm.title.trim() || !createForm.start_time || !createForm.end_time) return
     setSubmitting(true)
+    setError(null)
     try {
       const block = await createLifeBlock({
         title: createForm.title.trim(),
@@ -163,13 +165,14 @@ export function LifeBlocksPage() {
       setCreateForm(emptyForm())
       setShowAdd(false)
     } catch (err) {
-      warnError(err, "Couldn't create block")
+      setError(err instanceof Error ? err.message : "Couldn't create block")
     } finally {
       setSubmitting(false)
     }
   }
 
   async function handleSave(id: number, values: FormValues) {
+    setError(null)
     try {
       const updated = await updateLifeBlock(id, {
         title: values.title.trim(),
@@ -185,18 +188,19 @@ export function LifeBlocksPage() {
           .sort((a, b) => a.start_time.localeCompare(b.start_time)),
       )
     } catch (err) {
-      warnError(err, "Couldn't update block")
+      setError(err instanceof Error ? err.message : "Couldn't update block")
       throw err
     }
   }
 
   async function handleDelete(block: LifeBlock) {
     if (!window.confirm(`Delete "${block.title}"?`)) return
+    setError(null)
     try {
       await deleteLifeBlock(block.id)
       setBlocks((prev) => prev.filter((b) => b.id !== block.id))
     } catch (err) {
-      warnError(err, "Couldn't delete block")
+      setError(err instanceof Error ? err.message : "Couldn't delete block")
     }
   }
 
@@ -232,8 +236,17 @@ export function LifeBlocksPage() {
         </Button>
       </div>
 
+      {error ? (
+        <div
+          className="rounded-xl border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger shadow-sm backdrop-blur-sm"
+          role="alert"
+        >
+          {error}
+        </div>
+      ) : null}
+
       {showAdd && (
-        <div className="fluid-card p-5">
+        <div className="rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
           <BlockForm
             values={createForm}
             onChange={setCreateForm}
@@ -341,7 +354,7 @@ function BlockCard({ block, onSave, onDelete }: BlockCardProps) {
 
   const cfg = lifeBlockCategoryConfig[block.category]
   return (
-    <div className="fluid-card p-4">
+    <div className="rounded-xl border border-border/80 bg-card/90 p-4 shadow-sm backdrop-blur-sm">
       <div className="flex items-start justify-between">
         <div>
           <p className="font-medium">{block.title}</p>

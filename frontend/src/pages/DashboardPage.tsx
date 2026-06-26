@@ -1,19 +1,13 @@
-import { ArrowRight, CheckCircle2, Flame, Plus, Target, TrendingUp } from "lucide-react"
+import { CheckCircle2, Clock, Flame, Target, TrendingUp, Plus, ArrowRight } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 
+import { Button } from "../components/ui/button"
+import { Input } from "../components/ui/input"
 import { listExtractedCandidates, listHabitCompletions, listHabits, listTasks, createTask } from "../lib/api"
-import type { Habit, HabitCompletion, Task } from "../lib/api"
-import { warnError } from "../lib/browserWarnings"
+import type { Habit, HabitCompletion, Task, TaskPriority } from "../lib/api"
 import { formatMonthDay, formatShortDay, getWeekDays, getWeekEnd, getWeekStart, isSameLocalDay } from "../lib/dates"
 import { cn } from "../lib/utils"
-
-function getGreeting() {
-  const h = new Date().getHours()
-  if (h < 12) return "Good morning"
-  if (h < 17) return "Good afternoon"
-  return "Good evening"
-}
 
 export function DashboardPage() {
   const navigate = useNavigate()
@@ -26,12 +20,14 @@ export function DashboardPage() {
   const [completions, setCompletions] = useState<HabitCompletion[]>([])
   const [pendingEmailTaskCount, setPendingEmailTaskCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [quickTask, setQuickTask] = useState("")
   const [isAdding, setIsAdding] = useState(false)
 
   useEffect(() => {
     async function load() {
       setIsLoading(true)
+      setLoadError(null)
       try {
         const [t, h, c, emailCandidates] = await Promise.all([
           listTasks(),
@@ -44,7 +40,7 @@ export function DashboardPage() {
         setCompletions(c)
         setPendingEmailTaskCount(emailCandidates.length)
       } catch (err) {
-        warnError(err, "Something went wrong")
+        setLoadError(err instanceof Error ? err.message : "Something went wrong")
       } finally {
         setIsLoading(false)
       }
@@ -57,7 +53,6 @@ export function DashboardPage() {
   const habitTarget = habits.reduce((sum, h) => sum + h.target_count_per_week, 0)
   const habitDone = completions.length
   const habitProgress = habitTarget ? Math.round((habitDone / habitTarget) * 100) : 0
-  const momentum = Math.round(((doneTasks.length + habitDone) / Math.max(1, tasks.length + habitTarget)) * 100)
 
   async function handleQuickAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -67,8 +62,6 @@ export function DashboardPage() {
       const task = await createTask({ title: quickTask.trim(), priority: "medium" })
       setTasks((prev) => [task, ...prev])
       setQuickTask("")
-    } catch (err) {
-      warnError(err, "Couldn't create task")
     } finally {
       setIsAdding(false)
     }
@@ -84,101 +77,212 @@ export function DashboardPage() {
     return [...taskItems, ...habitItems]
   }
 
-  const todayCount = getDayItems(new Date()).length
+  const panel = "rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm"
 
-  const stats = [
-    { icon: Target, label: "Open tasks", value: String(openTasks.length), sub: `${doneTasks.length} done`, color: "text-primary", bg: "bg-primary/12" },
-    { icon: Flame, label: "Habits this week", value: `${habitDone}/${habitTarget}`, sub: `${habitProgress}% complete`, color: "text-accent", bg: "bg-accent/12" },
-    { icon: CheckCircle2, label: "Done today", value: String(todayCount), sub: "tasks & habits", color: "text-success", bg: "bg-success/12" },
-    { icon: TrendingUp, label: "Momentum", value: `${momentum}%`, sub: "weekly score", color: "text-warning", bg: "bg-warning/12" },
-  ]
+  function priorityDotClass(priority: TaskPriority) {
+    switch (priority) {
+      case "urgent":
+        return "bg-danger"
+      case "high":
+        return "bg-danger/80"
+      case "medium":
+        return "bg-warning"
+      default:
+        return "bg-primary"
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-12 animate-fade-up">
-      {/* Email inbox nudge */}
+    <div className="space-y-8">
+      {loadError ? (
+        <div
+          className="rounded-xl border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger shadow-sm backdrop-blur-sm"
+          role="alert"
+        >
+          {loadError}
+        </div>
+      ) : null}
+
       {pendingEmailTaskCount > 0 ? (
         <Link
           to="/inbox"
-          className="flex items-center justify-between gap-4 rounded-2xl bg-accent/10 px-5 py-3.5 text-sm text-accent-foreground transition-colors hover:bg-accent/15"
+          className="flex items-center justify-between rounded-xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-primary shadow-sm"
         >
-          <span className="font-medium text-foreground">
-            {pendingEmailTaskCount} email task{pendingEmailTaskCount === 1 ? "" : "s"} waiting in your inbox
+          <span>
+            {pendingEmailTaskCount} email task{pendingEmailTaskCount === 1 ? "" : "s"} waiting
           </span>
-          <ArrowRight className="h-4 w-4 text-accent" />
+          <ArrowRight className="h-4 w-4" />
         </Link>
       ) : null}
 
-      {/* ── Hero greeting ── */}
-      <header>
-        <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
-          {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-        </p>
-        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
-          {getGreeting()}.
-        </h1>
-        <p className="mt-3 max-w-prose text-base leading-relaxed text-muted-foreground">
-          {isLoading
-            ? "Gathering your week…"
-            : openTasks.length === 0 && habitTarget === 0
-            ? "A clean slate. Add a task or start a habit to set the tone for your week."
-            : `You have ${openTasks.length} open task${openTasks.length === 1 ? "" : "s"} and you've completed ${habitDone} of ${habitTarget} habit${habitTarget === 1 ? "" : "s"} this week.`}
-        </p>
-
-        {/* Quick add — quiet underline field, not a boxed control */}
-        <form onSubmit={handleQuickAdd} className="mt-6 flex items-center gap-3 border-b border-border/70 pb-2 focus-within:border-primary/60">
-          <Plus className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-          <input
-            placeholder="What needs doing?"
-            value={quickTask}
-            onChange={(e) => setQuickTask(e.target.value)}
-            className="w-full bg-transparent text-base outline-none placeholder:text-muted-foreground/60"
-          />
-          {quickTask.trim() ? (
-            <button
-              type="submit"
-              disabled={isAdding}
-              className="flex-shrink-0 text-sm font-medium text-primary transition-opacity hover:opacity-80 disabled:opacity-40"
-            >
-              Add
-            </button>
-          ) : null}
-        </form>
-      </header>
-
-      {/* ── Stats ticker — numbers, no boxes ── */}
-      <section className="flex flex-wrap items-start gap-x-12 gap-y-8 border-y border-border/70 py-7">
-        {isLoading
-          ? [0, 1, 2, 3].map((i) => (
-              <div key={i} className="space-y-2">
-                <div className="h-8 w-16 animate-pulse rounded-lg bg-muted" />
-                <div className="h-3 w-20 animate-pulse rounded bg-muted" />
-              </div>
-            ))
-          : stats.map((s) => (
-              <div key={s.label} className="flex items-start gap-3">
-                <span className={cn("mt-1 flex h-8 w-8 items-center justify-center rounded-full", s.bg)}>
-                  <s.icon className={cn("h-4 w-4", s.color)} />
-                </span>
-                <div>
-                  <p className="stat-value font-display text-3xl font-semibold leading-none">{s.value}</p>
-                  <p className="mt-1.5 text-sm text-foreground">{s.label}</p>
-                  {s.sub && <p className="text-xs text-muted-foreground">{s.sub}</p>}
-                </div>
+      {/* Stats row */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {isLoading ? (
+          <>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className={`${panel} animate-pulse`}>
+                <div className="h-9 w-9 rounded-xl bg-muted" />
+                <div className="mt-3 h-8 w-16 rounded-lg bg-muted" />
+                <div className="mt-2 h-3 w-24 rounded bg-muted" />
               </div>
             ))}
-      </section>
+          </>
+        ) : (
+          <>
+            <StatCard
+              icon={Target}
+              label="Tasks open"
+              value={openTasks.length}
+              trend={tasks.length > 0 ? `${doneTasks.length} done` : undefined}
+              color="primary"
+            />
+            <StatCard
+              icon={Flame}
+              label="Habits this week"
+              value={`${habitDone}/${habitTarget}`}
+              trend={`${habitProgress}% complete`}
+              color="success"
+            />
+            <StatCard
+              icon={CheckCircle2}
+              label="Done today"
+              value={getDayItems(new Date()).length}
+              color="blue"
+            />
+            <StatCard
+              icon={TrendingUp}
+              label="Weekly momentum"
+              value={`${Math.round(
+                ((doneTasks.length + habitDone) / Math.max(1, tasks.length + habitTarget)) * 100,
+              )}%`}
+              color="purple"
+            />
+          </>
+        )}
+      </div>
 
-      {/* ── This week ── */}
-      <section>
-        <div className="mb-5 flex items-baseline justify-between">
-          <h2 className="font-display text-2xl font-semibold">This week</h2>
-          <span className="text-sm text-muted-foreground">
-            {formatMonthDay(weekStart)} – {formatMonthDay(weekEnd)}
-          </span>
+      {/* Main two-column layout */}
+      <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+        {/* Left: Quick actions & open items */}
+        <div className="space-y-4">
+          {/* Quick add */}
+          <div className={panel}>
+            <h3 className="font-medium">Quick add</h3>
+            <form onSubmit={handleQuickAdd} className="mt-3 flex gap-2">
+              <Input
+                placeholder="What needs doing?"
+                value={quickTask}
+                onChange={(e) => setQuickTask(e.target.value)}
+                className="h-10"
+              />
+              <Button type="submit" size="sm" disabled={isAdding} className="h-10 px-3">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </form>
+            <div className="mt-3 flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => navigate("/tasks")}
+              >
+                Full task view
+                <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => navigate("/habits")}
+              >
+                Log habit
+              </Button>
+            </div>
+          </div>
+
+          {/* Open tasks preview */}
+          <div className={panel}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium">Open tasks</h3>
+              <Link to="/tasks" className="text-xs text-muted-foreground hover:text-foreground">
+                See all
+              </Link>
+            </div>
+            <div className="mt-3 space-y-2">
+              {openTasks.slice(0, 5).map((task) => (
+                <div
+                  key={task.id}
+                  className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
+                >
+                  <div className={cn("h-2 w-2 rounded-full", priorityDotClass(task.priority))} />
+                  <span className="flex-1 truncate text-sm">{task.title}</span>
+                  {task.due_date && (
+                    <span className="text-xs text-muted-foreground">
+                      <Clock className="inline h-3 w-3" />
+                    </span>
+                  )}
+                </div>
+              ))}
+              {openTasks.length === 0 && (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No open tasks. Nice work!
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Habits quick view */}
+          <div className={panel}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium">Active habits</h3>
+              <Link to="/habits" className="text-xs text-muted-foreground hover:text-foreground">
+                See all
+              </Link>
+            </div>
+            <div className="mt-3 space-y-2">
+              {habits.slice(0, 4).map((habit) => {
+                const count = completions.filter((c) => c.habit_id === habit.id).length
+                const progress = Math.round((count / habit.target_count_per_week) * 100)
+                return (
+                  <div key={habit.id} className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-success/10">
+                      <Flame className="h-4 w-4 text-success" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{habit.title}</p>
+                      <div className="mt-1 h-1.5 w-full rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-success transition-all"
+                          style={{ width: `${Math.min(100, progress)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {count}/{habit.target_count_per_week}
+                    </span>
+                  </div>
+                )
+              })}
+              {habits.length === 0 && (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No habits yet. Start one!
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="-mx-1 overflow-x-auto px-1 pb-2">
-          <div className="flex min-w-[560px] gap-2.5">
+        {/* Right: Week timeline */}
+        <div>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">This week</h2>
+            <p className="text-sm text-muted-foreground">
+              {formatMonthDay(weekStart)} — {formatMonthDay(weekEnd)}
+            </p>
+          </div>
+
+          <div className="-mx-4 overflow-x-auto pb-1 sm:mx-0">
+            <div className="flex min-w-0 gap-2 px-4 sm:grid sm:grid-cols-7 sm:px-0">
             {weekDays.map((day) => {
               const items = getDayItems(day)
               const isToday = day.toDateString() === new Date().toDateString()
@@ -188,153 +292,115 @@ export function DashboardPage() {
                 <div
                   key={day.toISOString()}
                   className={cn(
-                    "relative flex-1 rounded-2xl px-2.5 py-3 transition-colors",
-                    isToday ? "bg-primary/10 ring-1 ring-primary/25" : "panel",
-                    isFuture && "opacity-60",
+                    "relative w-[5.5rem] shrink-0 rounded-xl border border-border/80 bg-card/90 p-3 shadow-sm backdrop-blur-sm sm:w-auto",
+                    isToday
+                      ? "border-primary shadow-sm ring-1 ring-primary/20"
+                      : "hover:border-primary/40",
+                    isFuture && "opacity-70"
                   )}
                 >
-                  <div className="mb-2 text-center">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  {/* Day header */}
+                  <div className="mb-3 text-center">
+                    <p className="text-xs font-medium text-muted-foreground">
                       {formatShortDay(day)}
                     </p>
-                    <p className={cn("mt-0.5 font-display text-2xl font-semibold", isToday && "text-primary")}>
+                    <p
+                      className={cn(
+                        "mt-0.5 text-lg font-semibold",
+                        isToday && "text-primary"
+                      )}
+                    >
                       {day.getDate()}
                     </p>
                   </div>
 
-                  <div className="space-y-1">
+                  {/* Items */}
+                  <div className="space-y-1.5">
                     {items.length > 0 ? (
                       items.slice(0, 3).map((item, i) => (
                         <div
                           key={i}
                           className={cn(
-                            "truncate rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                            "truncate rounded-md px-2 py-1 text-xs",
                             item.type === "habit"
-                              ? "bg-success/15 text-success"
-                              : "bg-accent/15 text-accent",
+                              ? "bg-success/10 text-success"
+                              : "bg-primary/10 text-primary"
                           )}
                         >
                           {item.title}
                         </div>
                       ))
                     ) : (
-                      <div className="py-3 text-center text-lg text-muted-foreground/25">·</div>
+                      <div className="py-4 text-center">
+                        <span className="text-2xl text-muted-foreground/30">—</span>
+                      </div>
                     )}
                     {items.length > 3 && (
-                      <p className="text-center text-[10px] text-muted-foreground">+{items.length - 3}</p>
+                      <p className="text-center text-xs text-muted-foreground">
+                        +{items.length - 3} more
+                      </p>
                     )}
                   </div>
+
+                  {/* Today indicator */}
+                  {isToday && (
+                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-white">
+                      TODAY
+                    </div>
+                  )}
                 </div>
               )
             })}
           </div>
-        </div>
+          </div>
 
-        <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            Task
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-success" />
-            Habit
-          </span>
+          {/* Legend */}
+          <div className="mt-4 flex items-center justify-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-primary" />
+              Task
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-success" />
+              Habit
+            </span>
+          </div>
         </div>
-      </section>
+      </div>
+    </div>
+  )
+}
 
-      {/* ── Open tasks ── */}
-      <section>
-        <div className="mb-3 flex items-baseline justify-between border-b border-border/70 pb-3">
-          <h2 className="font-display text-2xl font-semibold">Open tasks</h2>
-          <Link to="/tasks" className="flex items-center gap-1 text-sm text-primary hover:underline">
-            View all <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-        <div className="divide-y divide-border/60">
-          {isLoading
-            ? [1, 2, 3].map((i) => (
-                <div key={i} className="flex items-center gap-3 py-3">
-                  <div className="h-2 w-2 animate-pulse rounded-full bg-muted" />
-                  <div className="h-3.5 flex-1 animate-pulse rounded bg-muted" />
-                </div>
-              ))
-            : openTasks.slice(0, 6).map((task) => (
-                <button
-                  key={task.id}
-                  type="button"
-                  className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:text-primary"
-                  onClick={() => navigate("/tasks")}
-                >
-                  <span
-                    className={cn(
-                      "h-2 w-2 flex-shrink-0 rounded-full",
-                      task.priority === "urgent" || task.priority === "high"
-                        ? "bg-danger"
-                        : task.priority === "medium"
-                        ? "bg-warning"
-                        : "bg-primary/50",
-                    )}
-                  />
-                  <span className="flex-1 truncate text-[15px]">{task.title}</span>
-                </button>
-              ))}
-          {!isLoading && openTasks.length === 0 && (
-            <div className="py-6 text-center">
-              <p className="text-muted-foreground">All clear — no open tasks.</p>
-              <button onClick={() => navigate("/tasks")} className="mt-2 text-sm text-primary hover:underline">
-                Add one
-              </button>
-            </div>
-          )}
-        </div>
-      </section>
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  trend,
+  color,
+}: {
+  icon: React.ElementType
+  label: string
+  value: string | number
+  trend?: string
+  color: "primary" | "success" | "blue" | "purple"
+}) {
+  const colorClasses = {
+    primary: "bg-primary/10 text-primary",
+    success: "bg-success/10 text-success",
+    blue: "bg-accent/10 text-accent",
+    purple: "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200",
+  }
 
-      {/* ── Active habits ── */}
-      <section>
-        <div className="mb-4 flex items-baseline justify-between border-b border-border/70 pb-3">
-          <h2 className="font-display text-2xl font-semibold">Active habits</h2>
-          <Link to="/habits" className="flex items-center gap-1 text-sm text-primary hover:underline">
-            View all <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+  return (
+    <div className="rounded-xl border border-border/80 bg-card/90 p-4 shadow-sm backdrop-blur-sm">
+      <div className="flex items-start justify-between">
+        <div className={cn("rounded-xl p-2", colorClasses[color])}>
+          <Icon className="h-4 w-4" />
         </div>
-        <div className="space-y-5">
-          {isLoading
-            ? [1, 2].map((i) => (
-                <div key={i} className="space-y-2">
-                  <div className="h-3.5 w-32 animate-pulse rounded bg-muted" />
-                  <div className="h-2 w-full animate-pulse rounded-full bg-muted" />
-                </div>
-              ))
-            : habits.slice(0, 4).map((habit) => {
-                const count = completions.filter((c) => c.habit_id === habit.id).length
-                const pct = Math.min(100, Math.round((count / habit.target_count_per_week) * 100))
-                return (
-                  <div key={habit.id}>
-                    <div className="mb-2 flex items-baseline justify-between">
-                      <p className="text-[15px] font-medium">{habit.title}</p>
-                      <span className="text-sm text-muted-foreground">
-                        {count}/{habit.target_count_per_week}
-                      </span>
-                    </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-success/80 to-success transition-all duration-700"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-          {!isLoading && habits.length === 0 && (
-            <div className="py-4 text-center">
-              <p className="text-muted-foreground">No habits yet.</p>
-              <button onClick={() => navigate("/habits")} className="mt-1 text-sm text-primary hover:underline">
-                Start one
-              </button>
-            </div>
-          )}
-        </div>
-      </section>
+      </div>
+      <p className="mt-3 text-2xl font-bold tracking-tight">{value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      {trend && <p className="mt-1 text-xs font-medium text-foreground/70">{trend}</p>}
     </div>
   )
 }

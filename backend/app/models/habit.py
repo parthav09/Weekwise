@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -8,7 +8,6 @@ from app.core.database import Base
 
 class Habit(Base):
     __tablename__ = "habits"
-    __table_args__ = (Index("ix_habits_user_id", "user_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
@@ -37,7 +36,6 @@ class HabitCompletion(Base):
             "completed_on",
             name="uq_habit_completions_habit_id_completed_on",
         ),
-        Index("ix_habit_completions_user_completed_on", "user_id", "completed_on"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)

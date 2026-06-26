@@ -15,10 +15,6 @@ class Settings(BaseSettings):
 
     gemini_api_key: str | None = None
     ai_planner_model: str = "gemini-2.5-flash"
-    ai_planner_max_tasks: int = 40
-    ai_planner_max_habits: int = 20
-    ai_planner_max_pantry_items: int = 35
-    ai_planner_max_output_tokens: int = 5000
 
     google_client_id: str | None = None
     google_client_secret: str | None = None
@@ -35,10 +31,6 @@ class Settings(BaseSettings):
     gmail_sync_lookback_days: int = 7
     gmail_sync_max_messages: int = 50
     email_extractor_model: str | None = None
-    instacart_receipt_senders: str = "instacart.com"
-    receipt_sync_lookback_days: int = 90
-    receipt_sync_max_messages: int = 50
-    pantry_lookback_days: int = 21
     frontend_app_url: str = "http://localhost:5173"
 
     notifications_enabled: bool = False
@@ -53,9 +45,7 @@ class Settings(BaseSettings):
     web_push_contact_email: str | None = None
 
     model_config = SettingsConfigDict(
-        env_file=BACKEND_DIR / ".env",
-        env_file_encoding="utf-8",
-        env_ignore_empty=True,
+        env_file=BACKEND_DIR / ".env", env_file_encoding="utf-8"
     )
 
     @property

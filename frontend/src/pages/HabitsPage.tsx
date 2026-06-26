@@ -1,35 +1,25 @@
-import { Check, Clock, Flame, Pencil, Plus, Target, Trash2, X } from "lucide-react"
+import { Plus, Check, Flame, Target, Clock, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import {
-  completeHabit, createHabit, deleteHabit, listHabitCompletions, listHabits, updateHabit,
+  completeHabit,
+  createHabit,
+  deleteHabit,
+  listHabitCompletions,
+  listHabits,
+  updateHabit,
 } from "../lib/api"
 import type { Habit, HabitCompletion } from "../lib/api"
-import { warnError } from "../lib/browserWarnings"
-import { formatShortDay, getWeekEnd, getWeekStart, isSameLocalDay, toLocalDateKey } from "../lib/dates"
+import {
+  formatShortDay,
+  getWeekEnd,
+  getWeekStart,
+  isSameLocalDay,
+  toLocalDateKey,
+} from "../lib/dates"
 import { cn } from "../lib/utils"
-
-/** Circular SVG arc progress ring */
-function ProgressRing({ pct, size = 56, stroke = 4, color = "hsl(var(--primary))" }: {
-  pct: number; size?: number; stroke?: number; color?: string
-}) {
-  const r = (size - stroke * 2) / 2
-  const circ = 2 * Math.PI * r
-  const offset = circ - (pct / 100) * circ
-  return (
-    <svg width={size} height={size} className="progress-ring -rotate-90">
-      <circle cx={size / 2} cy={size / 2} r={r} stroke="hsl(var(--muted))" strokeWidth={stroke} fill="none" />
-      <circle
-        cx={size / 2} cy={size / 2} r={r}
-        stroke={color} strokeWidth={stroke} fill="none"
-        strokeDasharray={circ} strokeDashoffset={offset}
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}
 
 export function HabitsPage() {
   const weekStart = useMemo(() => getWeekStart(), [])
@@ -38,9 +28,11 @@ export function HabitsPage() {
   const [habits, setHabits] = useState<Habit[]>([])
   const [completions, setCompletions] = useState<HabitCompletion[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [completingId, setCompletingId] = useState<number | null>(null)
 
+  // Add form state
   const [newTitle, setNewTitle] = useState("")
   const [newTarget, setNewTarget] = useState("5")
   const [newMinutes, setNewMinutes] = useState("")
@@ -48,33 +40,41 @@ export function HabitsPage() {
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
+    setError(null)
     try {
       const [h, c] = await Promise.all([listHabits(), listHabitCompletions(weekStart, weekEnd)])
       setHabits(h)
       setCompletions(c)
     } catch (err) {
-      warnError(err, "Couldn't load habits")
+      setError(err instanceof Error ? err.message : "Couldn't load habits")
     } finally {
       setIsLoading(false)
     }
   }, [weekStart, weekEnd])
 
-  useEffect(() => { void loadData() }, [loadData])
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault()
     if (!newTitle.trim()) return
+
     setIsSubmitting(true)
+    setError(null)
     try {
       const habit = await createHabit({
         title: newTitle.trim(),
-        target_count_per_week: Math.max(1, Number(newTarget) || 5),
+        target_count_per_week: Math.max(4, Number(newTarget) || 5),
         estimated_minutes: newMinutes ? Number(newMinutes) : null,
       })
       setHabits((prev) => [habit, ...prev])
-      setNewTitle(""); setNewTarget("5"); setNewMinutes(""); setShowAddForm(false)
+      setNewTitle("")
+      setNewTarget("5")
+      setNewMinutes("")
+      setShowAddForm(false)
     } catch (err) {
-      warnError(err, "Couldn't create habit")
+      setError(err instanceof Error ? err.message : "Couldn't create habit")
     } finally {
       setIsSubmitting(false)
     }
@@ -82,17 +82,19 @@ export function HabitsPage() {
 
   async function handleComplete(habitId: number) {
     setCompletingId(habitId)
+    setError(null)
     try {
       const completion = await completeHabit(habitId)
       setCompletions((prev) => [completion, ...prev])
     } catch (err) {
-      warnError(err, "Couldn't log habit")
+      setError(err instanceof Error ? err.message : "Couldn't log habit")
     } finally {
       setCompletingId(null)
     }
   }
 
   async function saveHabit(habitId: number, edits: { title: string; target: number; minutes: string }) {
+    setError(null)
     try {
       const updated = await updateHabit(habitId, {
         title: edits.title.trim(),
@@ -101,24 +103,43 @@ export function HabitsPage() {
       })
       setHabits((prev) => prev.map((h) => (h.id === updated.id ? updated : h)))
     } catch (err) {
-      warnError(err, "Couldn't update habit")
+      setError(err instanceof Error ? err.message : "Couldn't update habit")
       throw err
     }
   }
 
   async function removeHabit(habit: Habit) {
-    if (!window.confirm(`Delete "${habit.title}"?`)) return
+    if (!window.confirm(`Delete "${habit.title}"? All logged completions will be removed.`)) return
+    setError(null)
     try {
       await deleteHabit(habit.id)
       setHabits((prev) => prev.filter((h) => h.id !== habit.id))
       setCompletions((prev) => prev.filter((c) => c.habit_id !== habit.id))
     } catch (err) {
-      warnError(err, "Couldn't delete habit")
+      setError(err instanceof Error ? err.message : "Couldn't delete habit")
     }
   }
 
+  function getCompletionsForHabit(habitId: number) {
+    return completions.filter((c) => c.habit_id === habitId)
+  }
+
+  function hasLoggedToday(habitId: number) {
+    const todayKey = toLocalDateKey()
+    return completions.some(
+      (completion) =>
+        completion.habit_id === habitId &&
+        (completion.completed_on === todayKey ||
+          isSameLocalDay(completion.completed_at, new Date())),
+    )
+  }
+
   const weekDays = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => new Date(weekStart.getTime() + i * 86400000))
+    const days = []
+    for (let i = 0; i < 7; i++) {
+      days.push(new Date(weekStart.getTime() + i * 24 * 60 * 60 * 1000))
+    }
+    return days
   }, [weekStart])
 
   const totalTarget = habits.reduce((sum, h) => sum + h.target_count_per_week, 0)
@@ -126,147 +147,115 @@ export function HabitsPage() {
   const overallProgress = totalTarget ? Math.round((totalCompleted / totalTarget) * 100) : 0
 
   return (
-    <div className="space-y-8 animate-fade-up">
-
-      {/* Header */}
+    <div className="space-y-6">
+      {/* Header with stats */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Habits</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {totalCompleted} of {totalTarget} weekly completions · {overallProgress}%
+          <p className="text-sm text-muted-foreground">
+            {totalCompleted} of {totalTarget} weekly targets · {overallProgress}% complete
           </p>
         </div>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className={cn(
-            "btn-glow inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium shadow-sm transition-all",
-            showAddForm
-              ? "bg-muted text-muted-foreground hover:bg-muted/80"
-              : "bg-primary text-primary-foreground hover:bg-primary/90"
-          )}
-        >
-          {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+        <Button onClick={() => setShowAddForm(!showAddForm)}>
+          <Plus className="mr-1.5 h-4 w-4" />
           {showAddForm ? "Cancel" : "New habit"}
-        </button>
+        </Button>
       </div>
 
-      {/* Overall progress bar */}
-      <div className="fluid-card overflow-hidden p-5">
-        <div className="mb-3 flex items-center justify-between text-sm">
-          <span className="font-semibold">Weekly progress</span>
-          <span className={cn("font-bold", overallProgress >= 100 ? "text-success" : "text-muted-foreground")}>
-            {overallProgress}%
-          </span>
+      {error ? (
+        <div
+          className="rounded-xl border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger shadow-sm backdrop-blur-sm"
+          role="alert"
+        >
+          {error}
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+      ) : null}
+
+      {/* Progress bar */}
+      <div className="rounded-xl border border-border/80 bg-card/90 p-4 shadow-sm backdrop-blur-sm">
+        <div className="mb-2 flex items-center justify-between text-sm">
+          <span className="font-medium">Weekly progress</span>
+          <span className="text-muted-foreground">{overallProgress}%</span>
+        </div>
+        <div className="h-3 w-full rounded-full bg-muted">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-success/80 to-success transition-all duration-700"
+            className="h-full rounded-full bg-success transition-all"
             style={{ width: `${Math.min(100, overallProgress)}%` }}
           />
         </div>
-        {overallProgress >= 100 && (
-          <p className="mt-2 text-xs font-medium text-success">🎉 Weekly goal crushed!</p>
-        )}
       </div>
 
-      {/* Add form */}
+      {/* Add habit form */}
       {showAddForm && (
-        <div className="fluid-card overflow-hidden animate-fade-up">
-          <div className="border-b border-border/60 px-6 py-4">
-            <h3 className="font-semibold">Build a new habit</h3>
-          </div>
-          <form onSubmit={handleCreate} className="flex flex-wrap gap-3 p-6">
+        <div className="rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
+          <h3 className="mb-4 font-medium">Start a new habit</h3>
+          <form onSubmit={handleCreate} className="grid gap-4 sm:grid-cols-[1fr_auto_auto_auto]">
             <Input
               placeholder="What habit do you want to build?"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              className="h-11 min-w-[220px] flex-1 rounded-xl text-base"
+              className="h-11"
               autoFocus
             />
             <div className="flex items-center gap-2">
               <Target className="h-4 w-4 text-muted-foreground" />
               <Input
-                type="number" min="1" max="7"
+                type="number"
+                min="1"
+                max="7"
                 value={newTarget}
                 onChange={(e) => setNewTarget(e.target.value)}
-                className="h-11 w-20 rounded-xl"
-                placeholder="×/wk"
+                className="h-11 w-20"
+                placeholder="/week"
               />
             </div>
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
               <Input
-                type="number" min="1"
+                type="number"
+                min="1"
                 value={newMinutes}
                 onChange={(e) => setNewMinutes(e.target.value)}
-                className="h-11 w-24 rounded-xl"
-                placeholder="min"
+                className="h-11 w-24"
+                placeholder="minutes"
               />
             </div>
-            <Button type="submit" disabled={isSubmitting} className="h-11 rounded-2xl px-5">
-              {isSubmitting ? "Creating…" : "Create"}
+            <Button type="submit" disabled={isSubmitting} className="h-11">
+              {isSubmitting ? "Creating..." : "Create habit"}
             </Button>
           </form>
         </div>
       )}
 
-      {/* Loading skeletons */}
-      {isLoading && (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="fluid-card animate-pulse p-6">
-              <div className="flex items-start justify-between">
-                <div className="space-y-2">
-                  <div className="h-4 w-32 rounded bg-muted" />
-                  <div className="h-3 w-20 rounded bg-muted" />
-                </div>
-                <div className="h-14 w-14 rounded-full bg-muted" />
-              </div>
-              <div className="mt-6 h-2 w-full rounded-full bg-muted" />
-              <div className="mt-4 h-10 w-full rounded-xl bg-muted" />
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Habits grid */}
-      {!isLoading && habits.length > 0 && (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {habits.map((habit) => (
-            <HabitCard
-              key={habit.id}
-              habit={habit}
-              completions={completions.filter((c) => c.habit_id === habit.id)}
-              weekDays={weekDays}
-              isCompleting={completingId === habit.id}
-              loggedToday={completions.some(
-                (c) => c.habit_id === habit.id &&
-                  (c.completed_on === toLocalDateKey() || isSameLocalDay(c.completed_at, new Date()))
-              )}
-              onComplete={() => handleComplete(habit.id)}
-              onSave={(edits) => saveHabit(habit.id, edits)}
-              onDelete={() => removeHabit(habit)}
-            />
-          ))}
-        </div>
-      )}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {habits.map((habit) => (
+          <HabitCard
+            key={habit.id}
+            habit={habit}
+            completions={getCompletionsForHabit(habit.id)}
+            weekDays={weekDays}
+            isCompleting={completingId === habit.id}
+            loggedToday={hasLoggedToday(habit.id)}
+            onComplete={() => handleComplete(habit.id)}
+            onSave={(edits) => saveHabit(habit.id, edits)}
+            onDelete={() => removeHabit(habit)}
+          />
+        ))}
+      </div>
 
-      {/* Empty */}
-      {!isLoading && habits.length === 0 && (
-        <div className="fluid-card flex flex-col items-center py-20 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5">
-            <Flame className="h-7 w-7 text-primary" />
+      {habits.length === 0 && !isLoading && (
+        <div className="rounded-xl border border-dashed border-border/80 bg-card/40 p-12 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+            <Target className="h-6 w-6 text-muted-foreground" />
           </div>
-          <h3 className="mt-5 text-lg font-semibold">No habits yet</h3>
-          <p className="mt-1.5 max-w-xs text-sm text-muted-foreground">
-            Habits compound. Start small and let consistency do the work.
+          <h3 className="mt-4 font-medium">No habits yet</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Start building consistency by creating your first habit
           </p>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="mt-6 rounded-2xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
-          >
+          <Button className="mt-4" onClick={() => setShowAddForm(true)}>
             Create your first habit
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -284,7 +273,16 @@ interface HabitCardProps {
   onDelete: () => void
 }
 
-function HabitCard({ habit, completions, weekDays, isCompleting, loggedToday, onComplete, onSave, onDelete }: HabitCardProps) {
+function HabitCard({
+  habit,
+  completions,
+  weekDays,
+  isCompleting,
+  loggedToday,
+  onComplete,
+  onSave,
+  onDelete,
+}: HabitCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -292,14 +290,16 @@ function HabitCard({ habit, completions, weekDays, isCompleting, loggedToday, on
   useEffect(() => {
     if (!menuOpen) return
     function onClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
     }
     document.addEventListener("mousedown", onClick)
     return () => document.removeEventListener("mousedown", onClick)
   }, [menuOpen])
 
   const count = completions.length
-  const pct = Math.min(100, Math.round((count / habit.target_count_per_week) * 100))
+  const progress = Math.round((count / habit.target_count_per_week) * 100)
   const isComplete = count >= habit.target_count_per_week
 
   if (isEditing) {
@@ -307,127 +307,156 @@ function HabitCard({ habit, completions, weekDays, isCompleting, loggedToday, on
       <HabitEditForm
         habit={habit}
         onCancel={() => setIsEditing(false)}
-        onSubmit={async (edits) => { await onSave(edits); setIsEditing(false) }}
+        onSubmit={async (edits) => {
+          await onSave(edits)
+          setIsEditing(false)
+        }}
       />
     )
   }
 
   return (
-    <div className={cn(
-      "fluid-card group relative overflow-hidden p-6 transition-all hover:shadow-card-hover",
-      isComplete && "ring-1 ring-success/30"
-    )}>
-      {/* Top glow when complete */}
-      {isComplete && (
-        <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-success/40 via-success to-success/40" />
+    <div
+      className={cn(
+        "relative rounded-xl border border-border/80 p-5 shadow-sm backdrop-blur-sm transition-all",
+        isComplete ? "border-success/30 bg-success/10" : "bg-card/90 hover:border-primary/20 hover:shadow-md",
       )}
-
-      {/* Header row */}
+    >
       <div className="flex items-start justify-between">
-        <div className="flex-1 pr-2">
-          <h3 className="font-semibold leading-snug">{habit.title}</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {habit.estimated_minutes ? `${habit.estimated_minutes} min · ` : ""}
-            {habit.preferred_time_of_day || "Any time"}
-          </p>
-        </div>
-
-        {/* Progress ring + menu */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex items-center justify-center">
-            <ProgressRing
-              pct={pct}
-              size={52}
-              stroke={4}
-              color={isComplete ? "hsl(var(--success))" : "hsl(var(--primary))"}
-            />
-            <span className="absolute text-[11px] font-bold">
-              {count}<span className="font-normal text-muted-foreground">/{habit.target_count_per_week}</span>
-            </span>
-          </div>
-
-          <div className="relative" ref={menuRef}>
-            <button
-              type="button"
-              onClick={() => setMenuOpen((v) => !v)}
-              className="rounded-lg p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded-2xl border border-border bg-card shadow-card-hover">
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-sm hover:bg-muted"
-                  onClick={() => { setMenuOpen(false); setIsEditing(true) }}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-danger hover:bg-danger/8"
-                  onClick={() => { setMenuOpen(false); onDelete() }}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Delete
-                </button>
-              </div>
+        <div className="flex items-center gap-3">
+          <div
+            className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-xl",
+              isComplete ? "bg-success/10 text-success" : "bg-primary/10 text-primary",
             )}
+          >
+            <Flame className="h-5 w-5" />
           </div>
+          <div>
+            <h3 className="font-semibold">{habit.title}</h3>
+            <p className="text-xs text-muted-foreground">
+              {habit.estimated_minutes ? `${habit.estimated_minutes} min · ` : ""}
+              {habit.preferred_time_of_day || "Any time"}
+            </p>
+          </div>
+        </div>
+        <div className="relative" ref={menuRef}>
+          <button
+            type="button"
+            aria-label="Habit actions"
+            className="rounded p-1 hover:bg-muted"
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-full z-10 mt-1 w-36 overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                onClick={() => {
+                  setMenuOpen(false)
+                  setIsEditing(true)
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-danger/10"
+                onClick={() => {
+                  setMenuOpen(false)
+                  onDelete()
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Week dots */}
-      <div className="mt-5 flex items-center justify-between">
-        {weekDays.map((day, idx) => {
-          const done = completions.some(
-            (c) => c.completed_on === toLocalDateKey(day) || isSameLocalDay(c.completed_at, day)
-          )
-          const isToday = day.toDateString() === new Date().toDateString()
-          return (
-            <div key={idx} className="flex flex-col items-center gap-1">
-              <div className={cn("habit-dot", done && "done", isToday && !done && "today")}>
-                {done && <Check className="h-3 w-3 stroke-[3] text-white" />}
+      <div className="mt-4">
+        <div className="mb-2 flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">This week</span>
+          <span className={cn("font-medium", isComplete ? "text-success" : "text-foreground")}>
+            {count}/{habit.target_count_per_week}
+          </span>
+        </div>
+
+        <div className="flex gap-1.5">
+          {weekDays.map((day, index) => {
+            const hasCompletion = completions.some(
+              (c) => c.completed_on === toLocalDateKey(day) || isSameLocalDay(c.completed_at, day),
+            )
+            const isToday = day.toDateString() === new Date().toDateString()
+
+            return (
+              <div key={index} className={cn("flex flex-1 flex-col items-center gap-1")}>
+                <div
+                  className={cn(
+                    "flex h-8 w-full items-center justify-center rounded-lg border-2 transition-colors",
+                    hasCompletion
+                      ? "border-success bg-success"
+                      : "border-muted bg-transparent",
+                    isToday && !hasCompletion && "border-primary ring-1 ring-primary/15",
+                  )}
+                >
+                  {hasCompletion && (
+                    <Check className="h-3.5 w-3.5 stroke-[3] text-white" aria-hidden />
+                  )}
+                </div>
+                <span className="text-[10px] text-muted-foreground">
+                  {formatShortDay(day).charAt(0)}
+                </span>
               </div>
-              <span className="text-[9px] font-medium uppercase text-muted-foreground/60">
-                {formatShortDay(day).charAt(0)}
-              </span>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
 
-      {/* Log button */}
-      <button
-        type="button"
+      <div className="mt-4">
+        <div className="h-2 w-full rounded-full bg-muted">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              isComplete ? "bg-success" : "bg-primary",
+            )}
+            style={{ width: `${Math.min(100, progress)}%` }}
+          />
+        </div>
+      </div>
+
+      <Button
+        className={cn(
+          "mt-4 w-full",
+          isComplete ? "bg-success text-success-foreground hover:bg-success/90" : "bg-primary hover:bg-primary/90",
+        )}
         onClick={onComplete}
         disabled={isCompleting || loggedToday}
         aria-busy={isCompleting}
-        className={cn(
-          "btn-glow mt-5 w-full rounded-2xl py-2.5 text-sm font-semibold transition-all",
-          loggedToday
-            ? "bg-success/10 text-success cursor-default"
-            : isComplete
-            ? "bg-success text-white hover:bg-success/90 shadow-sm"
-            : "bg-primary text-white hover:bg-primary/90 shadow-sm",
-          (isCompleting || loggedToday) && "opacity-70"
-        )}
       >
         {isCompleting ? (
-          "Logging…"
+          "Logging..."
         ) : loggedToday ? (
-          <span className="flex items-center justify-center gap-2">
-            <Check className="h-4 w-4 stroke-[2.5]" />
-            Done for today
-          </span>
+          <>
+            <Check className="mr-1.5 h-4 w-4" />
+            Logged today
+          </>
+        ) : isComplete ? (
+          <>
+            <Check className="mr-1.5 h-4 w-4" />
+            Log today
+          </>
         ) : (
-          <span className="flex items-center justify-center gap-2">
-            <Flame className="h-4 w-4" />
+          <>
+            <Flame className="mr-1.5 h-4 w-4" />
             I did this today
-          </span>
+          </>
         )}
-      </button>
+      </Button>
     </div>
   )
 }
@@ -448,40 +477,55 @@ function HabitEditForm({ habit, onCancel, onSubmit }: HabitEditFormProps) {
     e.preventDefault()
     if (!title.trim()) return
     setSaving(true)
-    try { await onSubmit({ title, target: Number(target) || 1, minutes }) }
-    catch { setSaving(false) }
+    try {
+      await onSubmit({ title, target: Number(target) || 1, minutes })
+    } catch {
+      setSaving(false)
+    }
   }
 
   return (
     <form
       onSubmit={handleSubmit}
-      className="fluid-card space-y-3 p-5 ring-2 ring-primary/20 animate-fade-up"
+      className="space-y-3 rounded-xl border border-primary/30 bg-card p-5 shadow-sm"
     >
       <Input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        className="h-10 rounded-xl"
+        className="h-10"
         autoFocus
+        placeholder="Habit name"
       />
       <div className="flex flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Target className="h-4 w-4 text-muted-foreground" />
-          <Input type="number" min="1" max="7" value={target}
-            onChange={(e) => setTarget(e.target.value)} className="h-10 w-20 rounded-xl" />
+          <Input
+            type="number"
+            min="1"
+            max="7"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            className="h-10 w-20"
+          />
         </div>
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-muted-foreground" />
-          <Input type="number" min="1" value={minutes}
-            onChange={(e) => setMinutes(e.target.value)} className="h-10 w-24 rounded-xl" placeholder="min" />
+          <Input
+            type="number"
+            min="1"
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value)}
+            className="h-10 w-24"
+            placeholder="minutes"
+          />
         </div>
       </div>
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel}
-          className="rounded-xl px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted">
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
           Cancel
-        </button>
-        <Button type="submit" size="sm" disabled={saving} className="rounded-xl">
-          {saving ? "Saving…" : "Save"}
+        </Button>
+        <Button type="submit" size="sm" disabled={saving}>
+          {saving ? "Saving..." : "Save"}
         </Button>
       </div>
     </form>

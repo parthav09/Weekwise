@@ -8,9 +8,7 @@ Runs against an in-memory SQLite. Seeds:
 Then asserts that the generated plan:
   - never overlaps the Sleep block,
   - schedules the urgent task on day 0 or 1,
-  - ignores saved task clock times when choosing task slots,
-  - distributes the habit across multiple days,
-  - includes realistic planned meal blocks.
+  - distributes the habit across multiple days.
 
 Run with:  python -m scripts.smoke_planner   (from backend/)
 """
@@ -85,17 +83,6 @@ def main() -> int:
         )
         db.add(urgent)
 
-        fixed_time_task = Task(
-            user_id=1,
-            title="Draft project update",
-            priority=TaskPriority.high,
-            status=TaskStatus.todo,
-            due_date=datetime.combine(today, time(21, 30), tzinfo=timezone.utc),
-            estimated_minutes=30,
-            schedule_flexibility=TaskScheduleFlexibility.fixed,
-        )
-        db.add(fixed_time_task)
-
         habit = Habit(
             user_id=1,
             title="Run",
@@ -118,19 +105,17 @@ def main() -> int:
         all_blocks = [(d.date, b) for d in plan.days for b in d.blocks]
         task_blocks = [(d, b) for d, b in all_blocks if b.type == "task"]
         habit_blocks = [(d, b) for d, b in all_blocks if b.type == "habit"]
-        meal_blocks = [(d, b) for d, b in all_blocks if b.type == "meal"]
         life_blocks = [(d, b) for d, b in all_blocks if b.type == "life"]
 
         assert task_blocks, "expected at least one task block"
         assert habit_blocks, "expected habit blocks"
-        assert meal_blocks, "expected planned meal blocks"
         assert life_blocks, "expected life blocks (sleep)"
 
-        # Sleep should never overlap scheduled blocks.
+        # Sleep should never overlap a task or habit.
         for d, life in life_blocks:
             if life.metadata.get("category") != "sleep":
                 continue
-            for d2, other in task_blocks + habit_blocks + meal_blocks:
+            for d2, other in task_blocks + habit_blocks:
                 if d2 != d:
                     continue
                 overlap = not (other.end <= life.start or other.start >= life.end)
@@ -146,24 +131,12 @@ def main() -> int:
             f"urgent task scheduled too late: {urgent_days}"
         )
 
-        fixed_time_blocks = [b for _, b in task_blocks if b.title == "Draft project update"]
-        assert fixed_time_blocks, "fixed-time task wasn't scheduled"
-        assert fixed_time_blocks[0].start.time() != time(21, 30), (
-            "task was pinned to saved due time instead of being planned"
-        )
-
         # Habit should appear on >= 2 distinct days (target=3, week long).
         habit_days = {d for d, b in habit_blocks if b.title == "Run"}
         assert len(habit_days) >= 2, f"habit only appears on {habit_days}"
 
-        # Meals should cover normal daily anchors.
-        meal_types = {b.metadata.get("meal_type") for _, b in meal_blocks}
-        assert {"breakfast", "lunch", "dinner"} <= meal_types, (
-            f"missing expected meal anchors: {meal_types}"
-        )
-
-        # All task/habit/meal blocks fall inside the 8-22 day window.
-        for _, b in task_blocks + habit_blocks + meal_blocks:
+        # All task/habit blocks fall inside the 8-22 day window.
+        for _, b in task_blocks + habit_blocks:
             assert b.start.hour >= 8 and b.end.hour <= 22, (
                 f"block out of day window: {b.start} - {b.end}"
             )
@@ -172,7 +145,6 @@ def main() -> int:
         print(f"  notes: {plan.notes}")
         print(f"  task placements: {[(d.isoformat(), b.title) for d, b in task_blocks]}")
         print(f"  habit placements: {[(d.isoformat(), b.title, b.start.strftime('%H:%M')) for d, b in habit_blocks]}")
-        print(f"  first-day meals: {[(b.metadata.get('meal_type'), b.title, b.start.strftime('%H:%M')) for d, b in meal_blocks if d == today]}")
         return 0
     finally:
         db.close()

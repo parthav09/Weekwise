@@ -4,10 +4,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 
-PlanBlockType = Literal["task", "habit", "life", "meal"]
+PlanBlockType = Literal["task", "habit", "life"]
 PlanGenerator = Literal["rules", "ai"]
-PlanScope = Literal["day", "week"]
-PlanItemStatus = Literal["planned", "done", "skipped", "moved", "failed"]
 
 
 class PlanRequest(BaseModel):
@@ -46,44 +44,4 @@ class PlanRead(BaseModel):
     start_at: datetime
     end_at: datetime
     days: list[PlanDay] = Field(default_factory=list)
-    notes: list[str] = Field(default_factory=list)
-
-
-class ActivePlanSaveRequest(BaseModel):
-    user_id: int = 1
-    scope: PlanScope = "week"
-    plan: PlanRead
-
-
-class ActivePlanItemUpdate(BaseModel):
-    status: PlanItemStatus
-    feedback_reason: str | None = None
-    moved_to_start: datetime | None = None
-    moved_to_end: datetime | None = None
-
-
-class ActivePlanItemRead(PlanBlock):
-    id: int
-    generated_plan_id: int
-    date: date
-    status: PlanItemStatus
-    feedback_reason: str | None = None
-    moved_to_start: datetime | None = None
-    moved_to_end: datetime | None = None
-
-
-class ActivePlanDay(BaseModel):
-    date: date
-    blocks: list[ActivePlanItemRead] = Field(default_factory=list)
-
-
-class ActivePlanRead(BaseModel):
-    id: int
-    user_id: int
-    scope: PlanScope
-    generated_at: datetime
-    generator: PlanGenerator
-    start_at: datetime
-    end_at: datetime
-    days: list[ActivePlanDay] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
